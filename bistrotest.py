@@ -14,6 +14,13 @@ def orgate(name):
 def notgate(name):
 	return Function([ "01", "10"],["%si"%(name),"%s"%(name)],1)
 
+x=andgate("x")
+one=Function(["1"],["output"],0)
+print x
+print one
+out=one.join("output",x,"xi0")
+print out
+
 #Adder:
 U0_00=orgate("U0_00")
 U0_00.renamevar("U0_00i0","A0")
@@ -145,17 +152,34 @@ ADDER=X2.join("C2",BIT3,"H3")
 
 print "adder done",clock()-start
 
-for v in ADDER.table:
-	if v[2]=='0':
-		a=v[7]+v[5]+v[3]+v[0]
-		b=v[8]+v[6]+v[4]+v[1]
-		c=v[12]+v[13]+v[11]+v[10]+v[9]
+def hashfromrow(row,vars):
+	h={}
+	for i in range(len(vars)):
+		h[vars[i]]=row[i]
+	return h
+def addercheck(adder):
+	for x in adder.table:
+		v=hashfromrow(x,adder.vars)
+		if v.has_key("H") and (v["H"]!='0'):
+			continue
+		a=v["A3"]+v["A2"]+v["A1"]+v["A0"]
+		b=v["B3"]+v["B2"]+v["B1"]+v["B0"]
+		c=v["C3"]+v["R3"]+v["R2"]+v["R1"]+v["R0"]
 		a=int(a,2)
 		b=int(b,2)
 		c=int(c,2)
 		if c != (a+b):
 			print v,a,b,c
 			raise "uff"
+addercheck(ADDER)
+print "adder checked",clock()-start
+
+zero=Function(["0"],["output"],0)
+adder=zero.join("output",ADDER,"H")
+print "second adder assembled",clock()-start
+addercheck(adder)
+print "second adder checked",clock()-start
+print adder
 print "4-bit adder is okay"
 
 """

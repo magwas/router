@@ -57,9 +57,7 @@ class Function:
 			for rowb in range(rowa+1,len(self.table)):
 				A=self.table[rowa]
 				B=self.table[rowb]
-				if self.rowIsEqual(A,B,self.ilen) and (A[self.ilen+1:] != B[self.ilen+1:]):
-					print self.table,self.ilen,A, B
-					raise "inconsistency"
+				assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen+1:] != B[self.ilen+1:])), "inconsistency"
 
 	def _simplifyrows(self,rowa,rowb):
 		"""
@@ -212,8 +210,7 @@ class Function:
 			adds the columns of other function to ourselves
 			the other function's output is appended to self's output
 		"""
-		if len(self.table) != len(other.table):
-			raise "incompatible columns to add"
+		assert len(self.table) == len(other.table), "incompatible columns to add"
 		res=[]
 		for i in range(len(self.table)):
 			self.table[i]=self.table[i]+other.table[i]
@@ -230,9 +227,7 @@ class Function:
 			for j in range(self.ilen):
 				if other.vars[i] == self.vars[j]:
 					pos=j
-			if pos is None:
-				print "cannot map", self,other,mapping,i
-				raise "cannot map"
+			assert pos is not None, "cannot map"
 			mapping.append(pos)
 		#print "mapping",other,self,mapping
 		return mapping
