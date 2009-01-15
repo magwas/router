@@ -10,7 +10,7 @@ Class Pad:
 	"""
 		A pad of a cell.
 		A pad can be input or output.
-		P+R is done through connecting pads to each other
+		P+R is done by connecting pads to each other
 	"""
 	def __init__(direction=INPUT,name=""):
 		"""

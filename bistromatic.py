@@ -4,21 +4,165 @@
 	I do not understand it, so I have implemented what I figured out, which may or may not resembles to espresso.
 """
 
-class Function:
+class AbstractObject:
 	"""
-	A function contains a set of inputs, a set of outputs, and the truth table.
+		AbstractObject is describing some object (logic switch, counter, lut, flip-flop, etc), in an abstract manner.
+		AbstractObjects can be simplified, joined, and meld if they can agree on how to do that.
+		After they amended with device-specific knowledge, they can place themselves.
+	"""
+	def __init__(self,vars,ilen=0,iolen=0,objtype=None):
+		"""
+			vars is a list of strings naming the inputs and outputs of the object
+			ilen is the number of inputs
+			iolen is the number of bidirectional interfaces
+			the set of inputs is vars[:ilen]
+			the set of outputs is vars[ilen-iolen:]
+		"""
+		self.vars=vars
+		self.funcdict={}
+		self.fixvars()
+		self.ilen=ilen
+		self.iolen=iolen
+		self.objtype=objtype
+
+	def copy(self):
+		"""
+			copy constructor
+		"""
+		n=AbstractObject([]+self.vars,self.ilen,self.iolen,self.objtype)
+		return n
+
+	def renamevar(self,fromname,toname):
+		"""
+			renames a variable
+		"""
+		#print "renaming %s to %s"%(fromname,toname)
+		#print self.vars
+		p=self.vars.index(fromname)
+		self.vars[p]=toname
+		for (k,v) in self.funcdict.items():
+			if v==fromname:
+				self.funcdict[k]=toname
+		#print self.vars
+	def instantiate(self,name):
+		n=self.copy()
+		for i in self.vars:
+			n.renamevar(i,"%s:%s"%(name,i))
+		return n
+
+	def check(self):
+		"""
+			check if there is no inconsistency
+			should be implemented by the derived classes
+		"""
+		raise NotImplementedError
+
+	def simplify(self,check=None):
+		"""
+			makes optimizations within the object if possible
+			should be implemented by the derived classes
+		"""
+		raise NotImplementedError
+
+	def getDomain(self):
+		"""
+			gets the domain ([:self.ilen])
+		"""
+		return self.filter(range(self.ilen))
+
+	def getOutputs(self):
+		"""
+		"""
+		return self.vars[self.ilen-self.iolen:]
+	def createmapping(self,other):
+		"""
+			creates the mapping other.vars->self.vars, but only on inputs
+			e.g. [0,3,1] means ABCD -> ADB
+		"""
+		mapping=[]
+		for i in range(other.ilen):
+			pos=None
+			for j in range(self.ilen):
+				if other.vars[i] == self.vars[j]:
+					pos=j
+			assert pos is not None, "cannot map"
+			mapping.append(pos)
+		#print "mapping",other,self,mapping
+		return mapping
+
+	def fixvars(self):
+		"""
+			A convenience function initializing self.funcdict,
+			which holds function:varname pairs
+			initially each function equals its var name
+		"""
+		for i in self.vars:
+			self.funcdict[i]=i
+
+	def __str__(self):
+		return "%s(%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen)
+			
+	def join(self,myoutput,other,otherinput):
+		"""
+		returns a abstract object created by joining self and other through
+		self.myoutput=other.otherinput
+		if it is impossible, return None
+		implemented by derived classes knowing each other
+		"""
+		raise NotImplementedError
+
+	def mold(self,other):
+		"""
+		molds two abstract objects into one if it is possible
+		returns None if impossible
+		"""
+		raise NotImplementedError
+
+class DFlipFlop(AbstractObject):
+	"""
+		A D Flip-Flop have
+			an input (D)
+			a clock input (clock)
+			a asynchronous set input (aset)
+			a asynchronous clear input (aclr)
+			an output (Q)
+			an inverting output (/Q)
+	"""
+	def __init__(self,initial=0,renamedict=None):
+		"""
+			renamedict is a dictionary of function:newname items
+		"""
+		vars=["D","clock","aset","aclr","Q","/Q"]
+		AbstractObject.__init__(self,vars,4,objtype="DFlipFlop")
+		if renamedict:
+			for (k,v) in renamedict.items():
+				self.renamevar(k,v)
+		self.initial=initial
+	def copy(self):
+		n=DFlipFlop(self.initial,renamedict=self.funcdict)
+		return n
+		
+
+class LogicFunction(AbstractObject):
+	"""
+	A logic function contains a set of inputs, a set of outputs, and the truth table.
 	"""
 	def __init__(self,table,vars,ilen=None):
 		"""
 			table is the truth table
 			ilen is the number of input variables, if appicable
 			vars is a list of variable names. If applicable, inputs first.
+			iolen is always zero
 		"""
-		self.vars=vars
-		self.ilen=ilen
+		AbstractObject.__init__(self,vars,ilen,objtype="LogicFunction")
 		self.table=table
 		self.check()
+	def copy(self):
+		n=LogicFunction([]+self.table,[]+self.vars,self.ilen)
+		return n
 
+	def __str__(self):
+		return "%s([\n'%s'],%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen)
 	def resultfor(self,input):
 		"""
 			returns the result for a given input
@@ -28,12 +172,6 @@ class Function:
 				return line[len(input):]
 		return "-"*(len(self.vars)-self.ilen)
 
-	def renamevar(self,fromname,toname):
-		"""
-			renames a variable
-		"""
-		p=self.vars.index(fromname)
-		self.vars[p]=toname
 	def rowIsEqual(self,A,B,len):
 		"""
 			whether A[:len] == B[:len]
@@ -111,15 +249,6 @@ class Function:
 		if True or check:
 			self.check()
 
-	def getDomain(self):
-		"""
-			gets the domain ([:self.ilen])
-		"""
-		return self.filter(range(self.ilen))
-	def getOutputs(self):
-		"""
-		"""
-		return self.vars[self.ilen:]
 	def expand(self,line):
 		"""
 		"""
@@ -146,7 +275,7 @@ class Function:
 				lines=self.expand(line)
 				newdom+=lines
 		newvars=self.vars[:len1]+other.vars[:len2]
-		return Function(newdom,newvars,len(newvars))
+		return LogicFunction(newdom,newvars,len(newvars))
 
 	def computeresult(self,other):
 		"""
@@ -179,7 +308,7 @@ class Function:
 		for i in filterlist:
 			newinputs.append(self.vars[i])
 		#print "filter",newdom,newinputs
-		f=Function(newdom,newinputs,len(newinputs))
+		f=LogicFunction(newdom,newinputs,len(newinputs))
 		return f
 
 	def reduceinputs(self):
@@ -216,25 +345,6 @@ class Function:
 			self.table[i]=self.table[i]+other.table[i]
 		self.vars=self.vars+other.vars
 			
-	def createmapping(self,other):
-		"""
-			creates the mapping other.vars->self.vars, but only on inputs
-			e.g. [0,3,1] means ABCD -> ADB
-		"""
-		mapping=[]
-		for i in range(other.ilen):
-			pos=None
-			for j in range(self.ilen):
-				if other.vars[i] == self.vars[j]:
-					pos=j
-			assert pos is not None, "cannot map"
-			mapping.append(pos)
-		#print "mapping",other,self,mapping
-		return mapping
-
-	def __str__(self):
-		return "Function([\n'%s'],%s,%s)"%("',\n'".join(self.table),self.vars,self.ilen)
-			
 	def join(self,myoutput,other,otherinput):
 		"""
 		returns a function created by the equation
@@ -248,6 +358,8 @@ class Function:
 		than we compute F(a)|b0,F(a)|b and G(c0,F(a)|b) on domain
 		than we reduce it.
 		"""
+		if other.objtype != 'LogicFunction':
+			return None
 		# create domain
 		domain=self.permutate(other)
 		domain=domain.reduceinputs()
@@ -283,7 +395,7 @@ class Function:
 
 	def mold(self,other):
 		"""
-		molds two finctions into one
+		molds two functions into one
 		F:= (a) -> (b) //self
 		G:= (c) -> (d) //other
 		H:= (a,b) -> (c,d) 
@@ -292,6 +404,8 @@ class Function:
 		than we compute F(a) G(c) on domain
 		than we reduce it.
 		"""
+		if other.objtype != 'LogicFunction':
+			return None
 		# create domain
 		domain=self.permutate(other)
 		domain=domain.reduceinputs()

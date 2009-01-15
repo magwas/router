@@ -1,21 +1,21 @@
 #!/usr/bin/python
 
-from bistromatic import Function
+from bistromatic import LogicFunction
 from time import clock
 
 start=clock()
 
 def andgate(name):
-	return Function([ "000", "010", "100", "111"],["%si0"%(name),"%si1"%(name),"%s"%(name)],2)
+	return LogicFunction([ "000", "010", "100", "111"],["%si0"%(name),"%si1"%(name),"%s"%(name)],2)
 
 def orgate(name):
-	return Function([ "000", "011", "101", "111"],["%si0"%(name),"%si1"%(name),"%s"%(name)],2)
+	return LogicFunction([ "000", "011", "101", "111"],["%si0"%(name),"%si1"%(name),"%s"%(name)],2)
 
 def notgate(name):
-	return Function([ "01", "10"],["%si"%(name),"%s"%(name)],1)
+	return LogicFunction([ "01", "10"],["%si"%(name),"%s"%(name)],1)
 
 x=andgate("x")
-one=Function(["1"],["output"],0)
+one=LogicFunction(["1"],["output"],0)
 print x
 print one
 out=one.join("output",x,"xi0")
@@ -174,7 +174,7 @@ def addercheck(adder):
 addercheck(ADDER)
 print "adder checked",clock()-start
 
-zero=Function(["0"],["output"],0)
+zero=LogicFunction(["0"],["output"],0)
 adder=zero.join("output",ADDER,"H")
 print "second adder assembled",clock()-start
 addercheck(adder)
@@ -183,8 +183,8 @@ print adder
 print "4-bit adder is okay"
 
 """
-f=Function(["0101","1001","1111"],["a","b","c","d"],2)
-g=Function(["0011","1001","-111"],["e","f","g","h"],2)
+f=LogicFunction(["0101","1001","1111"],["a","b","c","d"],2)
+g=LogicFunction(["0011","1001","-111"],["e","f","g","h"],2)
 res=f.join("c",g,"f")
 print "result=",res
 
