@@ -35,7 +35,7 @@ class Generator:
 			which returns a set of AbstractObject instances (see there)
 			this fill in self.contents
 		"""
-		print self.properties
+		#print self.properties
 		#print "parsing lpm_library/"+self.properties['lpm_type']
 		gener=getattr(self,self.properties['lpm_type'],None)
 		assert gener , "No generator found for " + self.properties['lpm_type']

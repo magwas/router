@@ -2,7 +2,7 @@
 	cells and optimisations specific to 22V10 GAL
 """
 
-from cell import Cell,Pad
+from demszky import Cell,Port
 
 dRows= {
 	23: range(44/44+1,396/44+1),
@@ -30,6 +30,11 @@ oeRows={
 	14: [5368/44],
 	}
 
+class Device:
+	"""
+		class for devices
+	"""
+	pass
 class GAL22V10(Device):
 	"""
 		22V10 have
@@ -89,17 +94,17 @@ class OLMC(Cell):
 		self.OlmcSlot=None
 		if properties:
 			for (name,value) in properties.values():
-				if name = "haveflipflop":
+				if name == "haveflipflop":
 					self.haveflipflop=value
-				elif name = "inverted":
+				elif name == "inverted":
 					self.inverted=value
-				elif name = "input":
+				elif name == "input":
 					self.input=value
 				else:
 					raise "Unknown Property"
 		functions = (("D",INPUT), ("PIN",TRISTATE), ("OE",INPUT), ("Q",OUTPUT), ("/Q",TRISTATE))
 		for (name,direction) in functions:
-			self.attachPad(name,Pad(direction,name))
+			self.attachPort(name,Port(direction,name))
 
 	def optimize(self,function,connectedpads):
 		"""
@@ -126,11 +131,11 @@ class OLMC(Cell):
 						raise NotImplementedError
 				elif pad.cell.type == "INV":
 					#we optimize out inverters
-					invotherside=pad.cell.getConnectedPadsFor("Result")
-					if (len(invotherside)==1) and (invotherside[0].type="PIN"):
+					invotherside=pad.cell.getConnectedPortsFor("Result")
+					if (len(invotherside)==1) and (invotherside[0].type=="PIN"):
 						self.inverted= not self.inverted
 						eliminate.append(pad.cell)
-						relocate[(self,"PIN")]=pad.cell.getPadFor("Result")
+						relocate[(self,"PIN")]=pad.cell.getPortFor("Result")
 						optimized=1
 		elif function=="D":
 			if self.OlmcSlot:
@@ -167,7 +172,7 @@ class Switch(Cell):
 		In the optimization stage we mold 'em into one.
 		When placing, we assign slots to inputs and outputs, and values to fuses.
 	"""
-	def __init__(self,name,device,properties=None,inputs,outputs,table):
+	def __init__(self,name,device,inputs,outputs,table,properties=None):
 		"""
 			A switch is defined by its inputs and outputs and truth table.
 			inputs and outputs are list of strings describing the connection names
@@ -184,19 +189,19 @@ class Switch(Cell):
 		self.outputs=[]
 		for iname in self.inputs:
 			function=name+"_"+iname
-			self.attachPad(function,SwitchPad(INPUT,iname))
+			self.attachPort(function,SwitchPort(INPUT,iname))
 			self.inputs.attach(function)
 		for oname in self.outputs:
 			function=name+"_"+iname
-			self.attachPad(function,SwitchPad(OUTPUT,iname))
+			self.attachPort(function,SwitchPort(OUTPUT,iname))
 			self.outputs.attach(function)
 		self.table=[]
 		width=len(inputs)+len(outputs)
-		tablerows=table.replace(" ","").replace("|"."").split()
+		tablerows=table.replace(" ","").replace("|","").split()
 		for row in tablerows:
-			if row='':
+			if row=='':
 				continue
-			if len(row) != with:
+			if len(row) != width:
 				raise "Row length is not equal to sum of inputs and outputs"
 			else:
 				table.append(list(row))
@@ -206,32 +211,8 @@ class Switch(Cell):
 			For each connected switches we incorporate their all outputs and all inputs minus the one we connected to.
 			The table is permutated with the tables of incorporated switches.
 			If there are no other cells than switches connected, we eliminate the output.
-self:
- A B
- C D
-0101
-1001
-1111
-other:
- E F
- G H
-0011
-1001
--111
-
-C=F
- A B E (F)
- C D G H
-
-0100
-1000
-1101
-0110
-1010
-11-1
-
 		"""
-		if not self.getPadFor(function).isOutput():
+		if not self.getPortFor(function).isOutput():
 			return 0
 		hasotherobjects=0
 		for pad in connectedpads:
@@ -240,6 +221,5 @@ C=F
 				continue
 			newinputs=pad.cell.inputs
 			newoutputs=pad.cell.outputs
-			inlen=len(self.
-			for rows
+			FIXME
 		

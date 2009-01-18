@@ -4,6 +4,8 @@
 	I do not understand it, so I have implemented what I figured out, which may or may not resembles to espresso.
 """
 
+from demszky import directions,INPUT,OUTPUT
+
 class AbstractObject:
 	"""
 		AbstractObject is describing some object (logic switch, counter, lut, flip-flop, etc), in an abstract manner.
@@ -24,6 +26,23 @@ class AbstractObject:
 		self.ilen=ilen
 		self.iolen=iolen
 		self.objtype=objtype
+		self.outputsto={}
+		self.inputsfrom={}
+
+	def getDirectionOfPort(self,name):
+		"""
+			Gets direction of named port
+		"""
+		if name in self.vars:
+			dir=0
+			index=self.vars.index(name)
+			if index < self.ilen:
+				dir = dir | directions ["input"]
+			if index >= self.ilen-self.iolen:
+				dir = dir | directions ["output"]
+			#print name,dir
+			return dir
+		return directions["notconnected"]
 
 	def copy(self):
 		"""
@@ -118,6 +137,32 @@ class AbstractObject:
 		"""
 		raise NotImplementedError
 
+	def connectsto(self,pin,other,otherpin):
+		"""
+			The topology is described through two hashes,
+			inputsfrom and outputsto
+			the hashes are indexed by pin, and contain sets of (object,pinname) pairs
+			connectsto() declares that an object connects to another.
+			it sets the necessary things both in itself and the other object
+		"""
+		mydir=self.getDirectionOfPort(pin)
+		otherdir=other.getDirectionOfPort(otherpin)
+		if (OUTPUT & mydir) and (INPUT & otherdir):
+			if not self.outputsto.has_key(pin):
+				self.outputsto[pin]=set()
+			if not other.inputsfrom.has_key(otherpin):
+				other.inputsfrom[otherpin]=set()
+			self.outputsto[pin].add((other,otherpin))
+			other.inputsfrom[otherpin].add((self,pin))
+		if (INPUT & mydir) and (OUTPUT & otherdir):
+			if not self.inputsfrom.has_key(pin):
+				self.inputsfrom[pin]=set()
+			if not other.outputsto.has_key(otherpin):
+				other.outputsto[otherpin]=set()
+			other.outputsto[otherpin].add((self,pin))
+			self.inputsfrom[pin].add((other,otherpin))
+		
+
 class DFlipFlop(AbstractObject):
 	"""
 		A D Flip-Flop have
@@ -142,6 +187,23 @@ class DFlipFlop(AbstractObject):
 		n=DFlipFlop(self.initial,renamedict=self.funcdict)
 		return n
 		
+class IOPin(AbstractObject):
+	"""
+		An I/O pin have one port with direction, and no logic
+	"""
+	def __init__(self,direction,name):
+		self.direction=direction
+		if direction & INPUT:
+			ilen=1
+		else:
+			ilen=0
+		if direction & OUTPUT:
+			iolen=ilen
+		else:
+			iolen=0
+		AbstractObject.__init__(self,[name],1,objtype="IOPin")
+	def __str__(self):
+		return "%s(%s,%s)"%(self.objtype,self.direction,self.vars[0])
 
 class LogicFunction(AbstractObject):
 	"""
