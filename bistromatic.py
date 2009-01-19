@@ -12,7 +12,7 @@ class AbstractObject:
 		AbstractObjects can be simplified, joined, and meld if they can agree on how to do that.
 		After they amended with device-specific knowledge, they can place themselves.
 	"""
-	def __init__(self,vars,ilen=0,iolen=0,objtype=None):
+	def __init__(self,vars,ilen=0,iolen=0,objtype=None,name=None):
 		"""
 			vars is a list of strings naming the inputs and outputs of the object
 			ilen is the number of inputs
@@ -20,6 +20,7 @@ class AbstractObject:
 			the set of inputs is vars[:ilen]
 			the set of outputs is vars[ilen-iolen:]
 		"""
+		self.name=name
 		self.vars=vars
 		self.funcdict={}
 		self.fixvars()
@@ -65,6 +66,7 @@ class AbstractObject:
 		#print self.vars
 	def instantiate(self,name):
 		n=self.copy()
+		n.name=name
 		for i in self.vars:
 			n.renamevar(i,"%s:%s"%(name,i))
 		return n
@@ -118,8 +120,10 @@ class AbstractObject:
 		for i in self.vars:
 			self.funcdict[i]=i
 
-	def __str__(self):
-		return "%s(%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen)
+	def _print(self):
+		return "%s(%s,%s,%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen,self.inputsfrom,self.outputsto)
+	def __repr__(self):
+		return "%s(%s)"%(self.objtype,self.name)
 			
 	def join(self,myoutput,other,otherinput):
 		"""
@@ -128,7 +132,7 @@ class AbstractObject:
 		if it is impossible, return None
 		implemented by derived classes knowing each other
 		"""
-		raise NotImplementedError
+		return None
 
 	def mold(self,other):
 		"""
@@ -145,9 +149,14 @@ class AbstractObject:
 			connectsto() declares that an object connects to another.
 			it sets the necessary things both in itself and the other object
 		"""
+		if self==other:
+			return
 		mydir=self.getDirectionOfPort(pin)
 		otherdir=other.getDirectionOfPort(otherpin)
+		#print self,mydir,self.vars,self.ilen,self.iolen
+		#print other,otherdir,other.vars,other.ilen,other.iolen
 		if (OUTPUT & mydir) and (INPUT & otherdir):
+			#print "i->o"
 			if not self.outputsto.has_key(pin):
 				self.outputsto[pin]=set()
 			if not other.inputsfrom.has_key(otherpin):
@@ -155,13 +164,55 @@ class AbstractObject:
 			self.outputsto[pin].add((other,otherpin))
 			other.inputsfrom[otherpin].add((self,pin))
 		if (INPUT & mydir) and (OUTPUT & otherdir):
+			#print "o->i"
 			if not self.inputsfrom.has_key(pin):
 				self.inputsfrom[pin]=set()
 			if not other.outputsto.has_key(otherpin):
 				other.outputsto[otherpin]=set()
 			other.outputsto[otherpin].add((self,pin))
 			self.inputsfrom[pin].add((other,otherpin))
-		
+	def unconnect(self,pin,other,otherpin):
+		"""
+			eliminate the connection
+		"""
+		if self.inputsfrom.has_key(pin):
+			self.inputsfrom[pin] -= set([(other,otherpin)])
+		if self.outputsto.has_key(pin):
+			self.outputsto[pin] -= set([(other,otherpin)])
+	def replaceconn(self,oldie,newie,addinputs=False):
+		"""
+		replaces oldie with newie in all connections
+		replaces the connected side as well
+		"""
+		#print "replacing",self,oldie,newie,addinputs
+		#print self.inputsfrom,self.outputsto
+		for (pin,oset) in self.outputsto.items():
+			l=[]
+			for (ob,opin) in oset:
+				#print ob,opin
+				if ob==oldie:
+					#print "hit"
+					l.append((newie,opin))
+					if addinputs:
+						l.append((ob,opin))
+				else:
+					l.append((ob,opin))
+			self.outputsto[pin]=set(l)
+		if addinputs:
+			#print self.inputsfrom,self.outputsto
+			return
+		#print "inputs"
+		for (pin,oset) in self.inputsfrom.items():
+			l=[]
+			for (ob,opin) in oset:
+				#print ob,opin
+				if ob==oldie:
+					#print "hit"
+					l.append((newie,opin))
+				else:
+					l.append((ob,opin))
+			self.inputsfrom[pin]=set(l)
+		#print self.inputsfrom,self.outputsto
 
 class DFlipFlop(AbstractObject):
 	"""
@@ -173,12 +224,12 @@ class DFlipFlop(AbstractObject):
 			an output (Q)
 			an inverting output (/Q)
 	"""
-	def __init__(self,initial=0,renamedict=None):
+	def __init__(self,initial=0,renamedict=None,name=None):
 		"""
 			renamedict is a dictionary of function:newname items
 		"""
 		vars=["D","clock","aset","aclr","Q","/Q"]
-		AbstractObject.__init__(self,vars,4,objtype="DFlipFlop")
+		AbstractObject.__init__(self,vars,4,objtype="DFlipFlop",name=name)
 		if renamedict:
 			for (k,v) in renamedict.items():
 				self.renamevar(k,v)
@@ -201,30 +252,30 @@ class IOPin(AbstractObject):
 			iolen=ilen
 		else:
 			iolen=0
-		AbstractObject.__init__(self,[name],1,objtype="IOPin")
-	def __str__(self):
-		return "%s(%s,%s)"%(self.objtype,self.direction,self.vars[0])
+		AbstractObject.__init__(self,[name],objtype="IOPin",ilen=ilen,iolen=iolen,name=name)
+	def _print(self):
+		return "%s(%s,%s,%s,%s)"%(self.objtype,self.direction,self.vars[0],self.inputsfrom,self.outputsto)
 
 class LogicFunction(AbstractObject):
 	"""
 	A logic function contains a set of inputs, a set of outputs, and the truth table.
 	"""
-	def __init__(self,table,vars,ilen=None):
+	def __init__(self,table,vars,ilen=None,name=None):
 		"""
 			table is the truth table
 			ilen is the number of input variables, if appicable
 			vars is a list of variable names. If applicable, inputs first.
 			iolen is always zero
 		"""
-		AbstractObject.__init__(self,vars,ilen,objtype="LogicFunction")
+		AbstractObject.__init__(self,vars,ilen,objtype="LogicFunction",name=name)
 		self.table=table
 		self.check()
 	def copy(self):
 		n=LogicFunction([]+self.table,[]+self.vars,self.ilen)
 		return n
 
-	def __str__(self):
-		return "%s([\n'%s'],%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen)
+	def _print(self):
+		return "%s([\n'%s'],%s,%s,%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen,self.inputsfrom,self.outputsto)
 	def resultfor(self,input):
 		"""
 			returns the result for a given input
@@ -239,6 +290,7 @@ class LogicFunction(AbstractObject):
 			whether A[:len] == B[:len]
 			- is equal to anything
 			FIXME: can be optimized
+			FIXME: len = self.ilen
 		"""
 		for i in range(len):
 			a=A[i]
@@ -257,9 +309,89 @@ class LogicFunction(AbstractObject):
 			for rowb in range(rowa+1,len(self.table)):
 				A=self.table[rowa]
 				B=self.table[rowb]
-				assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen+1:] != B[self.ilen+1:])), "inconsistency"
+				assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen:] != B[self.ilen:])), "inconsistency: %s %s len=%u"%(A,B,self.ilen)
 
-	def _simplifyrows(self,rowa,rowb):
+	
+	def _simplifyrows(self,rowa,rowb,round=1):
+		"""
+		returns None or res
+			None means no optimization done
+			if round=1
+				res is the two molded rows
+			if round=0
+				res is a list of rows
+		"""
+		#print rowa,rowb
+		nrow=""
+		diff=0
+		sa=0
+		sb=0
+		for p in range(self.ilen):
+			if rowa[p] == rowb[p]:
+				nrow += rowa[p]
+			elif rowa[p] == '-':
+				sa+=1
+				nrow += '-'
+			elif rowb[p] == '-':
+				sb+=1
+				nrow += '-'
+			else:
+				diff+=1
+				nrow += '-'
+		for p in range(self.ilen,len(rowa)):
+			if rowa[p] == '-':
+				nrow += rowb[p]
+			elif rowb[p] == '-':
+				nrow += rowa[p]
+			elif rowa[p] == rowb[p]:
+				nrow += rowa[p]
+			else:
+				return None
+		#print nrow,diff,sa,sb
+		"""
+A  B   diff  	sa sb 	res
+00 00  0	0  0	00
+00 01  1	0  0	0-
+00 0-  0	0  1	0-
+00 10  1	0  0	_0
+00 11  2	0  0    None
+00 1-  1	0  1    None
+00 -0  0	0  1    -0
+00 -1  1	0  1    None ([00,01,11],[0-,11],[00,-1])
+00 --  0	0  2	--
+01 00  1	0  0	0_
+01 01  0	0  0 	01
+01 0-  0	0  1    0-
+01 10  2	0  0	None
+01 11  1	0  0	0_
+01 1-  1	0  1	None ([01,10,11],[01,1-],[10,-1])
+01 -0  1        0  1    None ([01,10,00],[10,1-],[01,-1])
+01 -1  0	0  1	-1
+01 --  0	0  2    --
+0- 00  0	1  0	0-
+0- 01  0	1  0	0-
+0- 0-  0	0  0	0-
+0- 10  1	1  0	None
+0- 11  1	1  0	01 00 11
+0- 1-  1	0  0    --   R
+0- -0  0        1  1    None
+0- -1  0	1  1    00 01 11
+0- --  0        0  1    --
+
+there is no way to find multi-DC solutions from two rows, so
+either DC solutions have to be added, and not replace in first runs,
+or at least three lines should be used for optimization.
+
+"""
+		if (diff > 1) or (diff*(sa+sb)) or (sa*sb):
+			return None
+		if (not round):
+			if diff:
+				return nrow
+			return None
+		return nrow
+	
+	def _simplifyrowsold(self,rowa,rowb):
 		"""
 		returns None or res
 			None means no optimization done
@@ -284,10 +416,83 @@ class LogicFunction(AbstractObject):
 		"""
 			AB+/AB=B
 			where n<=ilen
+                        for each row ex 10-1:
+				target is '1' or '0' (:=p) changed to -. it is done for each non-dc digits, eg -0-1 
+				and we look for
+					row in table
+					^p in table
+					then (^p and - -> 1) and (^p and - -> 0) in table, eg 0001 and 0011
+		"""
+		#print "before:",self
+		optimized=True
+		while optimized:
+			optimized=False
+			nt=[]
+			for row in range(len(self.table)-1):
+				a=self.table[row]
+				#print a
+				if a is None:
+					continue
+				if a in self.table[row+1:]:
+					optimized=True
+					x=row
+					while a in self.table[x+1:]:
+						x=self.table[x+1:].index(a)+x+1
+						self.table[x]=None
+					#print self.table,nt
+				for p in range(self.ilen):
+					#print a,p
+					if '0' == a[p]:
+						target=a[:p]+'1'+a[p+1:]
+					elif '1' == a[p]:
+						target=a[:p]+'0'+a[p+1:]
+					else:
+						continue
+					if target in self.table[row+1:]:
+						self.table[row]=None
+						nt.append(a[:p]+'-'+a[p+1:])
+						optimized=True
+						x=row
+						while target in self.table[x+1:]:
+							x=self.table[x+1:].index(target)+x+1
+							self.table[x]=None
+						#print self.table,nt
+						break
+					for r in range(self.ilen):
+						if a[r] != '-':
+							continue
+						t1=target[:r]+'1'+target[r+1:]
+						t2=target[:r]+'0'+target[r+1:]
+						if (t1 in self.table[row+1:]) and ( t2 in self.table[row+1:]):
+							optimized=True
+							opt=True
+							self.table[row]=None
+							nt.append(target[:r]+'-'+target[r+1:])
+							x=row
+							while t1 in self.table[x+1:]:
+								x=self.table[x+1:].index(t1)+x+1
+								self.table[x]=None
+							x=row
+							while t2 in self.table[x+1:]:
+								x=self.table[x+1:].index(t2)+x+1
+								self.table[x]=None
+							#print self.table,nt
+			while None in self.table:
+					self.table.remove(None)
+			self.table=nt+self.table
+			#print self.table
+		#print "after:",self
+		if True or check:
+			self.check()
+
+	def simplifyold(self,check=None):
+		"""
+			AB+/AB=B
+			where n<=ilen
 			if we can found two rows where everything is the same but the nth position, we can reduce it
 			to one row with '-' in the nth position
 		"""
-		#print "before:",self
+		print "before:",self
 		optimized=True
 		while optimized:
 			optimized=False
@@ -307,7 +512,7 @@ class LogicFunction(AbstractObject):
 							#print self.table
 			while None in self.table:
 					self.table.remove(None)
-		#print "after:",self
+		print "after:",self
 		if True or check:
 			self.check()
 

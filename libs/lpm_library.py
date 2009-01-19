@@ -68,11 +68,13 @@ class Generator:
 
 
 	@staticmethod
-	def makebus(namepattern,width):
+	def makebus(namepattern,width,nochop=False):
 		"""
 			makes a list of signal names in a bus
 		"""
 		bus=[]
+		if (width == 1) and (not nochop):
+			return [(namepattern%0)[:-1]]
 		for i in range(width):
 			bus.append(namepattern%i)
 		bus.reverse()
@@ -117,6 +119,36 @@ class Generator:
 				matrix.append(input+sel+out)
 		self.contents['mux']=[LogicFunction(matrix,vars,numinputs)]
 
+	def lpm_or(self):
+		"""
+			lpm_or megafunction
+		"""
+		width=self.getprop('lpm_width')
+		size=self.getprop('lpm_size')
+		ws=width*size
+		pipeline=self.getprop('lpm_pipeline',0)
+		assert pipeline == 0, "lpm_pipeline not yet implemented"
+		inputs=[]
+		outputs=self.makebus('result%u',width,nochop=1)
+		for i in range(size):
+			for j in range(width):
+				inputs.append("data%ux%u"%(i,j))
+		vars=inputs+outputs
+		matrix=[]
+		inf=2**width
+		for j in range(2**ws):
+			out=0
+			for i in range(size):
+				l=j/(inf ** i)%inf
+				out |= l
+			line=binary(j*inf+out,ws+width)
+			matrix.append(line)
+		#for i in matrix:
+		#	print i
+		#print vars,ws
+		self.contents['or']=[LogicFunction(matrix,vars,ws)]
+		#print self.contents['or']
+			
 	def lpm_inv(self):
 		"""
 			inverter
@@ -127,7 +159,7 @@ class Generator:
 		for i in range(inf):
 			line=binary(i,width)+binary((inf-1)^i,width)
 			matrix.append(line)
-		vars=self.makebus("input%u",width)+self.makebus("output%u",width)
+		vars=self.makebus("data%u",width)+self.makebus("result%u",width)
 		self.contents['inv']=[LogicFunction(matrix,vars,width)]
 			
 	def lpm_ff(self):

@@ -78,6 +78,7 @@ class EdifCell(Cell):
 				plist.append((portname,self.getDirectionOfPort(portname),self.contents[portname][0]))	
 		inputs=[]
 		outputs=[]
+		print plist
 		for (n,d,o) in plist:
 			if d & INPUT:
 				inputs.append((n,o))
@@ -91,7 +92,9 @@ class EdifCell(Cell):
 			return
 		for (iname,i) in inputs:
 			for (oname,o) in outputs:
+				#print "connecting",iname,i,oname,o
 				o.connectsto(oname,i,iname)
+				#print i._print(),o._print()
 		
 				
 	def _extractcontents(self,contents):

@@ -2,55 +2,78 @@
 
 from edif import Edif
 from demszky import directions
+from time import clock
+import sys
 
-f=open("example.edif")
+f=open(sys.argv[1])
 lisp=f.read()
 edif=Edif(lisp)
 
 objlist=edif.libs['design']['device'].enumobsj()
-"""
-now we have a list of objects
-let's try to merge logic functions
-first we determine
-	lvars: set of vars of the logic functions
-	ovars: set of vars of the other objects
-	evars = lvars - ovars: may be eliminable
-		which is not: is either a i/o pin (maybe have to have objects for them), or an errorr
-at the end we will have one or more logic cells, which we can mold into one,
-and a set of other objects, which we have to place somehow
-"""
 
-lfs=[]
-objs=[]
-lvars=[]
-ovars=[]
-for ac in objlist:
-	if ac.objtype=='LogicFunction':
-		lfs.append(ac)
-		lvars.extend(ac.vars)
-	else:
-		objs.append(ac)
-		ovars.extend(ac.vars)
+optimized=True
+while optimized:
+	optimized=False
+	for i in range(len(objlist)):
+		lf=objlist[i]
+		if lf is None:
+			continue
+		print "connections of", lf
+		print lf.inputsfrom, lf.outputsto
+		for (pin,oset) in lf.outputsto.items():
+			for (oob,opin) in oset:
+				time=clock()
+				print "joining",lf,pin,oob,opin
+				print lf._print(),oob._print()
+				r=lf.join(pin,oob,opin)
+				if r is not None:
+					"""
+					r is lf+oob
+					lf should be unconnected from oob
+					connect oob+lf connections to r
+					oob should be replaced with r
+					if lf have no more outputs, than it should be eliminated
+					"""
+					
+					r.name=lf.name+'+'+oob.name
+					print "result=",r._print()
 
-print "*************** Logic Functions *****************"
-for lf in lfs:
-	print lf
+					lf.unconnect(pin,oob,opin)
 
-print "*************** Other Objects *******************"
-for ob in objs:
-	print ob
+					hasouts=0
+					for (pin,objs) in lf.outputsto.items():
+						if len(objs):
+							hasouts=1
+							break
+					if not hasouts:
+						print "eliminating",lf
+						objlist[i]=None
+						for (pin,objs) in lf.inputsfrom.items():
+							print pin,objs
+							for (obj,opin) in objs:
+								obj.unconnect(opin,lf,pin)
 
-for lf in lfs:
-	print "connections of", lf
-	print lf.inputsfrom, lf.outputsto
-	miss=0
-	for (pin,oset) in lf.outputsto.items():
-		for (oob,opin) in oset:
-			print "joining",lf,pin,oob,opin
-			r=lf.join(pin,oob,opin)
-			if r is None:
-				miss += 1
-			else:
-				#FIXME the set of AOs in r should replace oob
-				print "succesful optimization step",r
+					for l in objlist:
+						if l is None:
+							continue
+						l.replaceconn(oob,r)
+						l.replaceconn(lf,r,addinputs=True)
+					print "replacing",oob,"with",r
+					j=objlist.index(oob)
+					objlist[j]=r
+					print "r=",r._print()
+					print clock()-time,"seconds"
+					optimized=True
+					break
+			if optimized:
+				break
+		if optimized:
+			break
+
+print "************************ Result **********************"
+print objlist
+for i in objlist:
+	if i is None:
+		continue
+	print i.name,i._print()
 

@@ -1,4 +1,5 @@
 
 clean:
-	rm *.pyc
+	rm *.pyc libs/*.pyc
+	make -C test clean
 

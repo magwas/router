@@ -5,6 +5,55 @@ from time import clock
 
 start=clock()
 
+
+test1=LogicFunction([
+'0000',
+'0011',
+'0101',
+'0111',
+'1001',
+'1011',
+'1101',
+'1111'],['a','b','c'],3)
+test1.simplify()
+print test1._print()
+test3= LogicFunction([
+'0000',
+'0100',
+'1000',
+'1100',
+'1110',
+'0011',
+'0111',
+'1011' ],['A0', 'B0', 'U0_10i0', 'U0_10'],3)
+test3.simplify()
+print """
+'--00',
+'-011',
+'1110',
+'0111'"""
+test2= LogicFunction([
+'001',
+'001',
+'011',
+'011',
+'101',
+'101',
+'110',
+'110' ],['A0', 'B0', 'U0_11'],2)
+test2.simplify()
+print """
+'-01',
+'011',
+'110'"""
+
+test1=LogicFunction(['0001','0011','0101','0111','1001','1011','1101','1111'],['a','b','c'],3)
+test1.simplify()
+print """
+'---1'
+"""
+print test1,'\n------------'
+
 def andgate(name):
 	return LogicFunction([ "000", "010", "100", "111"],["%si0"%(name),"%si1"%(name),"%s"%(name)],2)
 
@@ -50,6 +99,8 @@ R0=U0_32.join("U0_32",U0_31,"U0_31i1")
 U0_30=U0_21.join("U0_21",U0_30,"U0_30i1")
 C0=U0_01.join("U0_01",U0_30,"U0_30i0")
 BIT0=C0.mold(R0)
+print 'BIT0',BIT0
+
 
 U1_00=orgate("U1_00")
 U1_00.renamevar("U1_00i0","A1")
@@ -169,7 +220,7 @@ def addercheck(adder):
 		b=int(b,2)
 		c=int(c,2)
 		if c != (a+b):
-			print v,a,b,c
+			print "!",x,v,a,b,c
 			raise "uff"
 addercheck(ADDER)
 print "adder checked",clock()-start
