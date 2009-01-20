@@ -4,6 +4,7 @@ import re
 from libs import externals
 from demszky import Cell,Port,directions,INPUT,OUTPUT
 from bistromatic import LogicFunction,IOPin
+from sexpr import str2sexpr
 
 class EdifCell(Cell):
 	"""
@@ -19,6 +20,7 @@ class EdifCell(Cell):
 		Cell.__init__(self,name)
 		#print "cell %s"%name
 		self.properties={}
+		self.renames=[]
 		self.libs=libs
 		#print self.libs
 		if libname:
@@ -61,8 +63,7 @@ class EdifCell(Cell):
 				print "unknown:",i[0]
 	def _extractnet(self,name,contents):
 		"""
-			A net is a logic function where all the outputs are the OR
-			function of all the outputs
+			we connect pins of devices here
 		"""
 		plist=[]
 		for port in contents:
@@ -99,11 +100,11 @@ class EdifCell(Cell):
 				
 	def _extractcontents(self,contents):
 		"""
-			extracts contents from the interface
+			extracts contents 
+			FIXME: this is cheap and dirty
 		"""
 		for c in contents:
 			if c[0] == "instance":
-				#print "FIXME instance",c[1],c[2][2][1],c[2][2][2][1]
 				instname=c[1]
 				cellname=c[2][2][1]
 				library=c[2][2][2][1]
@@ -112,13 +113,7 @@ class EdifCell(Cell):
 				self.contents[instname]=n
 			if c[0] == "net":
 				self._extractnet(c[1],c[2][1:])
-				#print "FIXME net",c[1]
-				#for i in c[2][1:]:
-					#if len (i) >2:
-						#print i
-						#print " ",i[1],i[2][1]
-					#else:
-						#print " ",i[1]
+
 	def _extractports(self,interface):
 		"""
 			extract ports from the interface
@@ -127,17 +122,19 @@ class EdifCell(Cell):
 		for i in interface:
 			if i[0] == "port":
 				p=Port(i[1:]) #FIXME: we can get rid of Port
+				#print "\n\n",i[1:]
 				pin=IOPin(p.direction,p.name)
 				self.ports.append(Port(i[1:]))
 				if not self.islib:
 					self.contents[p.name]=[pin]
-				#FIXME property LPM_Polarity (string "INVERT")
-				#if Port.inverted:
-				# oldnam=pin.name
-				# tmpnam=pin.name+'_t'
-				# f=LogicFunction(["10","01",[oldnam,tmpnam],1)
-				# pin.name=tmpnam
-				# self.contents[oldnam].append(f)
+				if False and p.inverted:
+					oldnam=pin.name
+					tmpnam=pin.name+'_t'
+					f=LogicFunction(["10","01"],[oldnam,tmpnam],1)
+					self.renames.append((oldnam,tmpnam))
+					if not self.contents.has_key('inversions'):
+						self.contents['inversions']=[]
+					self.contents['inversions'].append(f)
 			elif i[0] == "property":
 				if i[2][0] == "string":
 					self.properties[i[1]]=i[2][1]
@@ -157,7 +154,8 @@ class Edif:
 		"""
 			content is the content of the EDIF file
 		"""
-		edif=self.pythonify(content)
+		edif=str2sexpr(content)[0]
+		#print edif
 		assert edif[0] == "edif", "is it really an EDIF file?"
 		self.designname=edif[1]
 		#print "design name is", self.designname
@@ -178,18 +176,6 @@ class Edif:
 			for cell in v:
 				s+="%s"%cell
 		return s
-
-	def pythonify(self,lisp):
-		"""
-			turns a string containing LISP into a list
-			it is quick&dirty string massage and eval
-		"""
-		lisp=lisp.lower()
-		l2=re.sub('\n','',lisp)
-		l3=re.sub('([^() \t]+)','"\\1",',l2)
-		l4=re.sub('""','"',l3)
-		l5=re.sub("\)[ \t]*\(","), (",l4)
-		return eval(l5)
 
 	def parselib(self,lib,construct,external=None):
 		libname=construct[1]

@@ -37,7 +37,8 @@ class Generator:
 		"""
 		#print self.properties
 		#print "parsing lpm_library/"+self.properties['lpm_type']
-		gener=getattr(self,self.properties['lpm_type'],None)
+		lpm_type=self.properties['lpm_type'].lower()
+		gener=getattr(self,lpm_type,None)
 		assert gener , "No generator found for " + self.properties['lpm_type']
 		gener()
 		#for c in self.contents:

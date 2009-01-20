@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-from types import StringType,TupleType
 
 dirs = [
 "notconnected",
@@ -24,17 +23,30 @@ class Port:
 			("Data1x1" ("direction" "INPUT"))
 			(("rename" "PORT0" "P[0]") ("direction" "INOUT"))
 		"""
+		self.inverted=False
 		for tag in repr:
-			if type(tag) is StringType:
+			if type(tag) is str:
 				#name of the port
 				self.name=tag
 				self.alias=tag
-			elif type(tag) is TupleType:
+			elif type(tag) is list:
 				if tag[0] == "direction":
 					self.direction=directions[tag[1]]
 				elif tag[0] == "rename":
 					self.name=tag[1]
 					self.alias=tag[2]
+				elif tag[0] == "property":
+					if tag[1] == "lpm_polarity":
+						if (tag[2][0] == 'string') and (tag[2][1].lower() == 'invert'):
+							self.inverted=True
+						else:
+							raise NotImplementedError, tag[2]
+					else:
+						raise NotImplementedError, tag[1]
+				else:
+					raise NotImplementedError, tag
+			else:
+				raise NotImplementedError, tag
 	def __str__(self):
 		return "PIN %s (%s) %s"%(self.name,self.alias,dirs[self.direction])
 

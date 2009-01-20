@@ -324,8 +324,6 @@ class LogicFunction(AbstractObject):
 		"""
 			whether A[:len] == B[:len]
 			- is equal to anything
-			FIXME: can be optimized
-			FIXME: len = self.ilen
 		"""
 		for i in range(len):
 			a=A[i]
@@ -528,6 +526,7 @@ class LogicFunction(AbstractObject):
 		than we compute F(a)|b0,F(a)|b and G(c0,F(a)|b) on domain
 		than we reduce it.
 		"""
+		#print "joining %s:%s -> %s:%s"%(self,myoutput,other,otherinput)
 		if other.objtype != 'LogicFunction':
 			return None
 		# create domain
