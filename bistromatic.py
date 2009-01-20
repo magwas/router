@@ -19,6 +19,8 @@ class AbstractObject:
 			iolen is the number of bidirectional interfaces
 			the set of inputs is vars[:ilen]
 			the set of outputs is vars[ilen-iolen:]
+			connections is a set of (pin,direction,object,otherpin) tuples.
+			Direction is either INPUT or OUTPUT, for bidirectional connections two tuples have to be added.
 		"""
 		self.name=name
 		self.vars=vars
@@ -27,8 +29,7 @@ class AbstractObject:
 		self.ilen=ilen
 		self.iolen=iolen
 		self.objtype=objtype
-		self.outputsto={}
-		self.inputsfrom={}
+		self.connections=set()
 
 	def getDirectionOfPort(self,name):
 		"""
@@ -50,6 +51,7 @@ class AbstractObject:
 			copy constructor
 		"""
 		n=AbstractObject([]+self.vars,self.ilen,self.iolen,self.objtype)
+		n.connections=self.connections+set()
 		return n
 
 	def renamevar(self,fromname,toname):
@@ -121,7 +123,7 @@ class AbstractObject:
 			self.funcdict[i]=i
 
 	def _print(self):
-		return "%s(%s,%s,%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen,self.inputsfrom,self.outputsto)
+		return "%s(%s,%s,%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen,self.connections)
 	def __repr__(self):
 		return "%s(%s)"%(self.objtype,self.name)
 			
@@ -141,78 +143,111 @@ class AbstractObject:
 		"""
 		raise NotImplementedError
 
-	def connectsto(self,pin,other,otherpin):
+	def connectto(self,pin,other,otherpin):
 		"""
-			The topology is described through two hashes,
-			inputsfrom and outputsto
-			the hashes are indexed by pin, and contain sets of (object,pinname) pairs
-			connectsto() declares that an object connects to another.
-			it sets the necessary things both in itself and the other object
+			adds a connection
 		"""
 		if self==other:
 			return
 		mydir=self.getDirectionOfPort(pin)
 		otherdir=other.getDirectionOfPort(otherpin)
-		#print self,mydir,self.vars,self.ilen,self.iolen
-		#print other,otherdir,other.vars,other.ilen,other.iolen
+		#print "connectto(%s,%s,%s,%s) (%s,%s)"%(self,pin,other,otherpin,mydir,otherdir)
 		if (OUTPUT & mydir) and (INPUT & otherdir):
-			#print "i->o"
-			if not self.outputsto.has_key(pin):
-				self.outputsto[pin]=set()
-			if not other.inputsfrom.has_key(otherpin):
-				other.inputsfrom[otherpin]=set()
-			self.outputsto[pin].add((other,otherpin))
-			other.inputsfrom[otherpin].add((self,pin))
-		if (INPUT & mydir) and (OUTPUT & otherdir):
-			#print "o->i"
-			if not self.inputsfrom.has_key(pin):
-				self.inputsfrom[pin]=set()
-			if not other.outputsto.has_key(otherpin):
-				other.outputsto[otherpin]=set()
-			other.outputsto[otherpin].add((self,pin))
-			self.inputsfrom[pin].add((other,otherpin))
-	def unconnect(self,pin,other,otherpin):
+			self.connections.add((pin,OUTPUT,other,otherpin))
+			other.connections.add((otherpin,INPUT,self,pin))
+		elif (INPUT & mydir) and (OUTPUT & otherdir):
+			self.connections.add((pin,INPUT,other,otherpin))
+			other.connections.add((otherpin,OUTPUT,self,pin))
+		#else:
+			#print "missed connectto(%s,%s,%s,%s) (%s,%s)"%(self._print(),pin,other._print(),otherpin,mydir,otherdir)
+
+	def disconnectfrom(self,pin,other,otherpin):
 		"""
-			eliminate the connection
+			inverse of connectto
 		"""
-		if self.inputsfrom.has_key(pin):
-			self.inputsfrom[pin] -= set([(other,otherpin)])
-		if self.outputsto.has_key(pin):
-			self.outputsto[pin] -= set([(other,otherpin)])
-	def replaceconn(self,oldie,newie,addinputs=False):
+		if self==other:
+			return
+		mydir=self.getDirectionOfPort(pin)
+		otherdir=other.getDirectionOfPort(otherpin)
+		#print "disconnectfrom(%s,%s,%s,%s) (%s,%s)"%(self,pin,other,otherpin,mydir,otherdir)
+		if (OUTPUT & mydir) and (INPUT & otherdir):
+			self.connections.discard((pin,OUTPUT,other,otherpin))
+			other.connections.discard((otherpin,INPUT,self,pin))
+		elif (INPUT & mydir) and (OUTPUT & otherdir):
+			self.connections.discard((pin,INPUT,other,otherpin))
+			other.connections.discard((otherpin,OUTPUT,self,pin))
+		else:
+			assert False, "missed disconnectfrom(%s,%s,%s,%s) (%s,%s)"%(self._print(),pin,other._print(),otherpin,mydir,otherdir)
+
+	def replaceconn(self,oldie,newie):
 		"""
 		replaces oldie with newie in all connections
-		replaces the connected side as well
+		replaces in the connected side as well
 		"""
-		#print "replacing",self,oldie,newie,addinputs
-		#print self.inputsfrom,self.outputsto
-		for (pin,oset) in self.outputsto.items():
-			l=[]
-			for (ob,opin) in oset:
-				#print ob,opin
-				if ob==oldie:
-					#print "hit"
-					l.append((newie,opin))
-					if addinputs:
-						l.append((ob,opin))
+		inputs=[]
+		outputs=[]
+		for (pin,d,ob,opin) in self.connections:
+			if ob == oldie:
+				if d == OUTPUT:
+					outputs.append((pin,opin))
 				else:
-					l.append((ob,opin))
-			self.outputsto[pin]=set(l)
-		if addinputs:
-			#print self.inputsfrom,self.outputsto
-			return
-		#print "inputs"
-		for (pin,oset) in self.inputsfrom.items():
-			l=[]
-			for (ob,opin) in oset:
-				#print ob,opin
-				if ob==oldie:
-					#print "hit"
-					l.append((newie,opin))
-				else:
-					l.append((ob,opin))
-			self.inputsfrom[pin]=set(l)
-		#print self.inputsfrom,self.outputsto
+					inputs.append((opin,pin))
+		for (pin,opin) in outputs:
+			self.disconnectfrom(pin,oldie,opin)
+			self.connectto(pin,newie,opin)
+			#print (pin,opin),"output moved from",oldie,"to",newie,"in",self._print()
+		for (opin,pin) in inputs:
+			oldie.disconnectfrom(opin,self,pin)
+			newie.connectto(opin,self,pin)
+			#print (opin,pin),"input moved from",oldie,"to",newie,"in",self._print()
+
+	def connectionswith(self,other,direction=None):
+		"""
+			list connections between self and other
+			if direction is given, then only connections in that direction are listed
+		"""
+		l=[]
+		for (pin,d,ob,opin) in self.connections:
+			if (ob == other) and ((direction==None) or (direction==d)): 
+				l.append((pin,d,opin))
+		return l
+	def hasoutputs(self):
+		"""
+			Do we have otputs yet?
+		"""
+		for (pin,d,ob,opin) in self.connections:
+			if d==OUTPUT:
+				return True
+		return False
+	def cloneoutput(self,oldie,newie):
+		"""
+			Clones connections to oldie to newie
+		"""
+		cons=[]
+		for (pin,d,ob,opin) in self.connections:
+			if (ob == oldie) and ( d == OUTPUT):
+				cons.append((pin,newie,opin))
+		for (pin,newie,opin) in cons:
+			#print "cloning",oldie,opin,"to",newie, "in",self
+			self.connectto(pin,newie,opin)
+
+	def _forgetobj(self,oldie):
+		"""
+			forget about object oldie
+		"""
+		cons=[]
+		for (pin,d,ob,opin) in self.connections:
+			if ob == oldie:
+				cons.append((pin,d,opin))
+		for (pin,d,opin) in cons:
+				self.connections.discard((pin,d,oldie,opin))
+	def forget(self):
+		"""
+			forget about myself: delete our connections
+		"""
+		for (pin,d,ob,opin) in self.connections:
+			ob._forgetobj(self)
+		
 
 class DFlipFlop(AbstractObject):
 	"""
@@ -254,7 +289,7 @@ class IOPin(AbstractObject):
 			iolen=0
 		AbstractObject.__init__(self,[name],objtype="IOPin",ilen=ilen,iolen=iolen,name=name)
 	def _print(self):
-		return "%s(%s,%s,%s,%s)"%(self.objtype,self.direction,self.vars[0],self.inputsfrom,self.outputsto)
+		return "%s(%s,%s,%s)"%(self.objtype,self.direction,self.vars[0],self.connections)
 
 class LogicFunction(AbstractObject):
 	"""
@@ -275,7 +310,7 @@ class LogicFunction(AbstractObject):
 		return n
 
 	def _print(self):
-		return "%s([\n'%s'],%s,%s,%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen,self.inputsfrom,self.outputsto)
+		return "%s([\n'%s'],%s,%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen,self.connections)
 	def resultfor(self,input):
 		"""
 			returns the result for a given input
@@ -311,107 +346,6 @@ class LogicFunction(AbstractObject):
 				B=self.table[rowb]
 				assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen:] != B[self.ilen:])), "inconsistency: %s %s len=%u"%(A,B,self.ilen)
 
-	
-	def _simplifyrows(self,rowa,rowb,round=1):
-		"""
-		returns None or res
-			None means no optimization done
-			if round=1
-				res is the two molded rows
-			if round=0
-				res is a list of rows
-		"""
-		#print rowa,rowb
-		nrow=""
-		diff=0
-		sa=0
-		sb=0
-		for p in range(self.ilen):
-			if rowa[p] == rowb[p]:
-				nrow += rowa[p]
-			elif rowa[p] == '-':
-				sa+=1
-				nrow += '-'
-			elif rowb[p] == '-':
-				sb+=1
-				nrow += '-'
-			else:
-				diff+=1
-				nrow += '-'
-		for p in range(self.ilen,len(rowa)):
-			if rowa[p] == '-':
-				nrow += rowb[p]
-			elif rowb[p] == '-':
-				nrow += rowa[p]
-			elif rowa[p] == rowb[p]:
-				nrow += rowa[p]
-			else:
-				return None
-		#print nrow,diff,sa,sb
-		"""
-A  B   diff  	sa sb 	res
-00 00  0	0  0	00
-00 01  1	0  0	0-
-00 0-  0	0  1	0-
-00 10  1	0  0	_0
-00 11  2	0  0    None
-00 1-  1	0  1    None
-00 -0  0	0  1    -0
-00 -1  1	0  1    None ([00,01,11],[0-,11],[00,-1])
-00 --  0	0  2	--
-01 00  1	0  0	0_
-01 01  0	0  0 	01
-01 0-  0	0  1    0-
-01 10  2	0  0	None
-01 11  1	0  0	0_
-01 1-  1	0  1	None ([01,10,11],[01,1-],[10,-1])
-01 -0  1        0  1    None ([01,10,00],[10,1-],[01,-1])
-01 -1  0	0  1	-1
-01 --  0	0  2    --
-0- 00  0	1  0	0-
-0- 01  0	1  0	0-
-0- 0-  0	0  0	0-
-0- 10  1	1  0	None
-0- 11  1	1  0	01 00 11
-0- 1-  1	0  0    --   R
-0- -0  0        1  1    None
-0- -1  0	1  1    00 01 11
-0- --  0        0  1    --
-
-there is no way to find multi-DC solutions from two rows, so
-either DC solutions have to be added, and not replace in first runs,
-or at least three lines should be used for optimization.
-
-"""
-		if (diff > 1) or (diff*(sa+sb)) or (sa*sb):
-			return None
-		if (not round):
-			if diff:
-				return nrow
-			return None
-		return nrow
-	
-	def _simplifyrowsold(self,rowa,rowb):
-		"""
-		returns None or res
-			None means no optimization done
-			res is the two molded rows
-		"""
-		if rowa==rowb:
-			return rowa
-		for p in range(self.ilen):
-			if rowa[p] == rowb[p]:
-				continue
-			if rowa[p+1:] == rowb[p+1:]:
-				#print "---",p,rowa,rowb
-				A=list(rowa)
-				A[p]='-'
-				#print "".join(A)
-				return "".join(A)
-			else:
-				return None
-					
-				
 	def simplify(self,check=None):
 		"""
 			AB+/AB=B
@@ -482,37 +416,6 @@ or at least three lines should be used for optimization.
 			self.table=nt+self.table
 			#print self.table
 		#print "after:",self
-		if True or check:
-			self.check()
-
-	def simplifyold(self,check=None):
-		"""
-			AB+/AB=B
-			where n<=ilen
-			if we can found two rows where everything is the same but the nth position, we can reduce it
-			to one row with '-' in the nth position
-		"""
-		print "before:",self
-		optimized=True
-		while optimized:
-			optimized=False
-			for rowa in range(len(self.table)-1):
-				a=self.table[rowa]
-				if a:
-					for rowb in range(rowa+1,len(self.table)):
-						b=self.table[rowb]
-						if not b:
-							continue
-						res=self._simplifyrows(a,b)
-						if res:
-							#print self.table
-							optimized=True
-							self.table[rowa]=None
-							self.table[rowb]=res
-							#print self.table
-			while None in self.table:
-					self.table.remove(None)
-		print "after:",self
 		if True or check:
 			self.check()
 

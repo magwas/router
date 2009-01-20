@@ -17,7 +17,7 @@ class EdifCell(Cell):
 			libs is a dictionary of libs
 		"""
 		Cell.__init__(self,name)
-		print "cell %s"%name
+		#print "cell %s"%name
 		self.properties={}
 		self.libs=libs
 		#print self.libs
@@ -25,7 +25,7 @@ class EdifCell(Cell):
 			self.islib=True
 		else:
 			self.islib=False
-		print "islib",self.islib
+		#print "islib",self.islib
 		self.parsecell(definition)
 		if self.islib:
 			generator=externals[libname].Generator
@@ -78,7 +78,7 @@ class EdifCell(Cell):
 				plist.append((portname,self.getDirectionOfPort(portname),self.contents[portname][0]))	
 		inputs=[]
 		outputs=[]
-		print plist
+		#print plist
 		for (n,d,o) in plist:
 			if d & INPUT:
 				inputs.append((n,o))
@@ -93,7 +93,7 @@ class EdifCell(Cell):
 		for (iname,i) in inputs:
 			for (oname,o) in outputs:
 				#print "connecting",iname,i,oname,o
-				o.connectsto(oname,i,iname)
+				o.connectto(oname,i,iname)
 				#print i._print(),o._print()
 		
 				
