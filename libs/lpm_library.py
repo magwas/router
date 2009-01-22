@@ -1,5 +1,5 @@
-from demszky import Cell
-from bistromatic import LogicFunction,DFlipFlop
+from edif import EdifCell
+from bistromatic import LogicFunction,DFlipFlop, INPUT, OUTPUT
 
 def itoa(x, base=10):
 	""" inverse of int(). should have been standard builtin or string function."""
@@ -33,7 +33,7 @@ class Generator:
 			initializes the library object based on its properties
 			this is called from the parser, and should prepare the cell for an eventual call of generate(),
 			which returns a set of AbstractObject instances (see there)
-			this fill in self.contents
+			this fill in self.content
 		"""
 		#print self.properties
 		#print "parsing lpm_library/"+self.properties['lpm_type']
@@ -41,21 +41,24 @@ class Generator:
 		gener=getattr(self,lpm_type,None)
 		assert gener , "No generator found for " + self.properties['lpm_type']
 		gener()
-		#for c in self.contents:
+		print "generating pins for",self.name,self.ports.items()
+		for (name,pin) in self.ports.items():
+			pdir = pin.direction
+			for ob in self.content:
+				#print "ob=",ob,ob.vars
+				if ob == pin:
+					continue
+				if name in ob.vars:
+					odir = ob.getDirectionOfPort(name)
+					if (odir & INPUT) and ( pdir & INPUT):
+						pin.connectto(name,ob,name)
+					if (odir & OUTPUT) and ( pdir & OUTPUT):
+						ob.connectto(name,pin,name)
+					assert odir & pdir , "problem with directions: %s %s"%(pin._print(),ob._print())
+					#print ob.connections,pin.connections
+			print pin,pin.connections
+		#for c in self.content:
 		#	print c
-
-	def generate(self,name):
-		"""
-			this is called in sight of the edif construct (instance ...)
-			it should return a set of AbstractObject instances made unique using name
-		"""
-		c=Cell(name,(None))
-		objs=[]
-		for (k,v) in self.contents.items():
-			for o in v:
-				i=o.instantiate(name)
-				objs.append(i)
-		return objs
 
 	
 	def getprop(self,name,defval=None):
@@ -90,7 +93,7 @@ class Generator:
 		matrix=binary(value,width)
 		pins=[]
 		pins=self.makebus('result%u',width)
-		self.contents["constant"]=[LogicFunction([matrix],pins,0)]
+		self.content.append(LogicFunction([matrix],pins,0,name="lpm_const%s"%value))
 
 	def lpm_mux(self):
 		"""
@@ -118,7 +121,7 @@ class Generator:
 				sel=binary(s,swidth)
 				input="-"*(width*s)+out+"-"*(width*(size-s-1))
 				matrix.append(input+sel+out)
-		self.contents['mux']=[LogicFunction(matrix,vars,numinputs)]
+		self.content.append(LogicFunction(matrix,vars,numinputs,name="mux %ux%u"%(width,size)))
 
 	def lpm_or(self):
 		"""
@@ -147,8 +150,7 @@ class Generator:
 		#for i in matrix:
 		#	print i
 		#print vars,ws
-		self.contents['or']=[LogicFunction(matrix,vars,ws)]
-		#print self.contents['or']
+		self.content.append(LogicFunction(matrix,vars,ws,name="or"))
 			
 	def lpm_inv(self):
 		"""
@@ -161,7 +163,7 @@ class Generator:
 			line=binary(i,width)+binary((inf-1)^i,width)
 			matrix.append(line)
 		vars=self.makebus("data%u",width)+self.makebus("result%u",width)
-		self.contents['inv']=[LogicFunction(matrix,vars,width)]
+		self.content.append(LogicFunction(matrix,vars,width,name="inv"))
 			
 	def lpm_ff(self):
 		"""
@@ -182,11 +184,10 @@ class Generator:
 		fftype=self.getprop('lpm_fftype','DFF')
 		assert fftype=='DFF', "only D flip-flop is implemented yet"
 		pvalue=self.getprop('lpm_pvalue',0)
-		contents=[]
 		for bit in range(width):
 			RD={"D":"data%u"%bit, "clock":"inclock", "Q":"q%u"%bit,"/Q":"/q%u"%bit}
-			c=DFlipFlop(renamedict=RD,initial=int((pvalue&(2 ** bit))>0))
-			contents.append(c)
+			c=DFlipFlop(renamedict=RD,initial=int((pvalue&(2 ** bit))>0),name="flipflop%u"%bit)
+			self.content.append(c)
 		funcs=[]
 		andtable=[ "000", "010", "100", "111"]
 		onetable=[ "00", "11"]
@@ -202,8 +203,8 @@ class Generator:
 			f=LogicFunction(andtable,["sclr","inclock","aclr"],2)
 			clk=clk.mold(f)
 		#print clk
-		contents.append(clk)
-		self.contents['ff']=contents
+		clk.name="clk"
+		self.content.append(clk)
 		
 		
 	def lpm_add_sub(self):
@@ -216,6 +217,7 @@ class Generator:
 		direction=self.getprop('lpm_direction',"default")
 		if 'unused' == direction:
 			direction = 'default'
+		direction=direction.lower()
 		assert (direction == 'add') or (direction == 'sub') or (direction == 'default'), "Wrong lpm_direction " + direction
 		pipeline=self.getprop('lpm_pipeline',0)
 		assert pipeline == 0, "lpm_pipeline not yet implemented"
@@ -315,7 +317,7 @@ class Generator:
 
 						#checkline(line,vars)
 						matrix.append(line)
-		f=LogicFunction(matrix,vars,len(inputs))
+		f=LogicFunction(matrix,vars,len(inputs),name="adder")
 		f.simplify()
-		self.contents['add_sub']=[f]
+		self.content.append(f)
 

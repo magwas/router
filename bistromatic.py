@@ -4,7 +4,19 @@
 	I do not understand it, so I have implemented what I figured out, which may or may not resembles to espresso.
 """
 
-from demszky import directions,INPUT,OUTPUT
+
+dirs = [
+"notconnected",
+"input",
+"output",
+"inout"]
+directions={}
+for i in range(len(dirs)):
+	directions[dirs[i]]=i
+INPUT=directions['input']
+OUTPUT=directions['output']
+INOUT=directions['inout']
+
 
 class AbstractObject:
 	"""
@@ -12,7 +24,7 @@ class AbstractObject:
 		AbstractObjects can be simplified, joined, and meld if they can agree on how to do that.
 		After they amended with device-specific knowledge, they can place themselves.
 	"""
-	def __init__(self,vars,ilen=0,iolen=0,objtype=None,name=None):
+	def __init__(self,vars,ilen=0,iolen=0,objtype=None,name=""):
 		"""
 			vars is a list of strings naming the inputs and outputs of the object
 			ilen is the number of inputs
@@ -50,9 +62,7 @@ class AbstractObject:
 		"""
 			copy constructor
 		"""
-		n=AbstractObject([]+self.vars,self.ilen,self.iolen,self.objtype)
-		n.connections=self.connections+set()
-		return n
+		raise NotImplementedError, "%s.copy()"%self.__class__
 
 	def renamevar(self,fromname,toname):
 		"""
@@ -66,12 +76,6 @@ class AbstractObject:
 			if v==fromname:
 				self.funcdict[k]=toname
 		#print self.vars
-	def instantiate(self,name):
-		n=self.copy()
-		n.name=name
-		for i in self.vars:
-			n.renamevar(i,"%s:%s"%(name,i))
-		return n
 
 	def check(self):
 		"""
@@ -123,7 +127,7 @@ class AbstractObject:
 			self.funcdict[i]=i
 
 	def _print(self):
-		return "%s(%s,%s,%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen,self.connections)
+		return "%s(%s,%s,%s,%s)"%(self.objtype,self.funcdict,self.ilen,self.iolen,self.connections)
 	def __repr__(self):
 		return "%s(%s)"%(self.objtype,self.name)
 			
@@ -134,6 +138,14 @@ class AbstractObject:
 		if it is impossible, return None
 		implemented by derived classes knowing each other
 		"""
+		r = other.joined(otherinput,self,myoutput)
+		if None != r:
+			return r
+		return None
+	def joined(self,myinput,other,otheroutput):
+		"""
+		same as join, but we are connected at our input
+		"""
 		return None
 
 	def mold(self,other):
@@ -143,7 +155,7 @@ class AbstractObject:
 		"""
 		raise NotImplementedError
 
-	def connectto(self,pin,other,otherpin):
+	def connectto_old(self,pin,other,otherpin):
 		"""
 			adds a connection
 		"""
@@ -158,8 +170,19 @@ class AbstractObject:
 		elif (INPUT & mydir) and (OUTPUT & otherdir):
 			self.connections.add((pin,INPUT,other,otherpin))
 			other.connections.add((otherpin,OUTPUT,self,pin))
-		#else:
-			#print "missed connectto(%s,%s,%s,%s) (%s,%s)"%(self._print(),pin,other._print(),otherpin,mydir,otherdir)
+		else:
+			assert False, "missed connectto(%s(%s),%s,%s(%s),%s) (%s,%s)"%(self,self.vars,pin,other,other.vars,otherpin,mydir,otherdir)
+
+	def connectto(self,pin,other,otherpin):
+		"""
+			adds a connection
+		"""
+		#print "connectto",self,pin,other,otherpin
+		if self==other:
+			#print "self=other"
+			return
+		self.connections.add((pin,OUTPUT,other,otherpin))
+		other.connections.add((otherpin,INPUT,self,pin))
 
 	def disconnectfrom(self,pin,other,otherpin):
 		"""
@@ -167,17 +190,11 @@ class AbstractObject:
 		"""
 		if self==other:
 			return
-		mydir=self.getDirectionOfPort(pin)
-		otherdir=other.getDirectionOfPort(otherpin)
-		#print "disconnectfrom(%s,%s,%s,%s) (%s,%s)"%(self,pin,other,otherpin,mydir,otherdir)
-		if (OUTPUT & mydir) and (INPUT & otherdir):
-			self.connections.discard((pin,OUTPUT,other,otherpin))
-			other.connections.discard((otherpin,INPUT,self,pin))
-		elif (INPUT & mydir) and (OUTPUT & otherdir):
-			self.connections.discard((pin,INPUT,other,otherpin))
-			other.connections.discard((otherpin,OUTPUT,self,pin))
-		else:
-			assert False, "missed disconnectfrom(%s,%s,%s,%s) (%s,%s)"%(self._print(),pin,other._print(),otherpin,mydir,otherdir)
+		#print " disconnectfrom(%s,%s,%s,%s) "%(self,pin,other,otherpin)
+		assert (pin,OUTPUT,other,otherpin) in self.connections, "missed discard (%s,%s,%s,%s) in %s(%s)"%(pin,OUTPUT,other,otherpin,self,self.connections)
+		assert (otherpin,INPUT,self,pin) in other.connections, "missed discard (%s,%s,%s,%s) in %s(%s)"%(otherpin,INPUT,self,pin,other,other.connections)
+		self.connections.discard((pin,OUTPUT,other,otherpin))
+		other.connections.discard((otherpin,INPUT,self,pin))
 
 	def replaceconn(self,oldie,newie):
 		"""
@@ -246,6 +263,7 @@ class AbstractObject:
 			forget about myself: delete our connections
 		"""
 		for (pin,d,ob,opin) in self.connections:
+			#print "%s still have connection (%s,%s,%s,%s)"%(self,pin,d,ob,opin)
 			ob._forgetobj(self)
 		
 
@@ -259,7 +277,7 @@ class DFlipFlop(AbstractObject):
 			an output (Q)
 			an inverting output (/Q)
 	"""
-	def __init__(self,initial=0,renamedict=None,name=None):
+	def __init__(self,initial=0,renamedict=None,name=""):
 		"""
 			renamedict is a dictionary of function:newname items
 		"""
@@ -270,15 +288,16 @@ class DFlipFlop(AbstractObject):
 				self.renamevar(k,v)
 		self.initial=initial
 	def copy(self):
-		n=DFlipFlop(self.initial,renamedict=self.funcdict)
+		n=DFlipFlop(self.initial,renamedict=self.funcdict,name=self.name)
 		return n
 		
 class IOPin(AbstractObject):
 	"""
 		An I/O pin have one port with direction, and no logic
 	"""
-	def __init__(self,direction,name):
+	def __init__(self,direction,name="",eliminable=True):
 		self.direction=direction
+		self.eliminable=eliminable
 		if direction & INPUT:
 			ilen=1
 		else:
@@ -288,14 +307,55 @@ class IOPin(AbstractObject):
 		else:
 			iolen=0
 		AbstractObject.__init__(self,[name],objtype="IOPin",ilen=ilen,iolen=iolen,name=name)
+	
+	def copy(self):
+		n=IOPin(self.direction,self.name,self.eliminable)
+		return n
+
+	def getDirectionOfPort(self,name):
+		"""
+			PIN ports are treated as bidirectional
+		"""
+		return INOUT
 	def _print(self):
 		return "%s(%s,%s,%s)"%(self.objtype,self.direction,self.vars[0],self.connections)
+
+	def join(self,myoutput,other,otherinput):
+		"""
+			We connect all our connections with each other, and commit suicide
+
+		"""
+		if not self.eliminable:
+			r = other.joined(otherinput,self,myoutput)
+			return r
+		dis=set()
+		con=set()
+		#print self.connections
+		for (pin1,d1,ob1,opin1) in self.connections:
+			for (pin2,d2,ob2,opin2) in self.connections:
+				#print (pin1,d1,ob1,opin1),(pin2,d2,ob2,opin2) 
+				if (d1==INPUT) and (d2 == OUTPUT):
+					#print "ez:",(ob1,opin1,self,pin1)
+					dis.add((ob1,opin1,self,pin1))
+					dis.add((self,pin1,ob2,opin2))
+					con.add((ob1,opin1,ob2,opin2))
+		#print dis
+		for (o1,p1,o2,p2) in dis:
+			o1.disconnectfrom(p1,o2,p2)
+		for (o1,p1,o2,p2) in con:
+			o1.connectto(p1,o2,p2)
+		#print dis,self.connections
+		return ([],[self])
+	def joined(self,myinput,other,otheroutput):
+		if not self.eliminable:
+			return None
+		return self.join(myinput,other,otheroutput)
 
 class LogicFunction(AbstractObject):
 	"""
 	A logic function contains a set of inputs, a set of outputs, and the truth table.
 	"""
-	def __init__(self,table,vars,ilen=None,name=None):
+	def __init__(self,table,vars,ilen=None,name=""):
 		"""
 			table is the truth table
 			ilen is the number of input variables, if appicable
@@ -306,7 +366,7 @@ class LogicFunction(AbstractObject):
 		self.table=table
 		self.check()
 	def copy(self):
-		n=LogicFunction([]+self.table,[]+self.vars,self.ilen)
+		n=LogicFunction([]+self.table,[]+self.vars,self.ilen,name=self.name)
 		return n
 
 	def _print(self):
@@ -526,9 +586,13 @@ class LogicFunction(AbstractObject):
 		than we compute F(a)|b0,F(a)|b and G(c0,F(a)|b) on domain
 		than we reduce it.
 		"""
+		r = other.joined(otherinput,self,myoutput)
+		if None != r:
+			return r
 		#print "joining %s:%s -> %s:%s"%(self,myoutput,other,otherinput)
 		if other.objtype != 'LogicFunction':
 			return None
+		#print "joining",self._print(),other._print()
 		# create domain
 		domain=self.permutate(other)
 		domain=domain.reduceinputs()
@@ -557,10 +621,41 @@ class LogicFunction(AbstractObject):
 		#ilen=domain.ilen-1
 		domain=domain.filter(vlist)
 		domain.ilen=ilen-1
+		#print domain._print()
 		domain.check()
 		domain.simplify()
 		domain.check()
-		return domain
+		domain.name=self.name+'+'+other.name
+
+		disc=set()
+		con=set()
+		for (pin,d,ob,opin) in self.connections:
+			if d == INPUT:
+				disc.add((ob,opin,self,pin))
+				con.add((ob,opin,domain,pin))
+			elif d == OUTPUT:
+				disc.add((self,pin,ob,opin))
+				if pin != myoutput:
+					con.add((domain,pin,ob,opin))
+		for (pin,d,ob,opin) in other.connections:
+			if d == INPUT:
+				disc.add((ob,opin,other,pin))
+				if pin != otherinput:
+					con.add((ob,opin,domain,pin))
+			elif d == OUTPUT:
+				disc.add((other,pin,ob,opin))
+				con.add((domain,pin,ob,opin))
+
+		for (o1,pin1,o2,pin2) in disc:
+			o1.disconnectfrom(pin1,o2,pin2)
+		for (o1,pin1,o2,pin2) in con:
+			o1.connectto(pin1,o2,pin2)
+
+		rl=[other]
+		if not self.hasoutputs():
+			rl.append(self)
+		#print "result",domain
+		return ([domain],rl)
 
 	def mold(self,other):
 		"""
