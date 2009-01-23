@@ -9,7 +9,7 @@
 	./`basename $< .v`
 	gtkwave $@
 
-all: galcounter.edif test1.edif test2.edif test3.edif
+all: galcounter.edif test1.edif test2.edif test3.edif test4.edif
 
 clean:
 	rm -f *.vcd *.edif *.vcd

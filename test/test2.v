@@ -14,9 +14,6 @@ wire D;
 wire Q ;
 
 //------------Code Starts Here-------------------------
-// Since this counter is a positive edge trigged one,
-// We trigger the below block with respect to positive
-// edge of the clock.
 assign	Q = (^ D) | F;
 
 endmodule // End of Module counter

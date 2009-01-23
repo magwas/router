@@ -48,7 +48,7 @@ class Cell:
 	"""
 		a cell have a name, ports, and content
 		name is a string
-		ports is a hash of IOPort objects, keyed by port name
+		ports is a hash of IOPin objects, keyed by port name
 		content is a list of all objects contained in the cell
 	"""
 	def __init__(self,name):
@@ -128,14 +128,14 @@ class EdifCell(Cell):
 		EdifCell is a cell constructed from an edif file
 		a cell have a name, ports, instances and content
 		name is a string
-		ports is a hash of IOPort objects, keyed by port name
+		ports is a hash of IOPin objects, keyed by port name
 		instances is a hash of EdifCell objects, keyed by instance name
 		content is a list of all objects contained in the cell
 		It is is a piece of logic, e.g. a gate array, a flip-flop, a LUT or a processor.
 		Cells have name and ports, and maybe contents.
 		Contents are AbstractObjects.
 	"""
-	def __init__(self,name,definition,libname=None,libs=None):
+	def __init__(self,name,definition,libname=None,libs=None,device=None):
 		"""
 			definition is a preparsed EDIF cell declaration
 			libname is the name of the lib
@@ -143,6 +143,7 @@ class EdifCell(Cell):
 		"""
 		Cell.__init__(self,name)
 		self.instances={}
+		self.device=device
 
 		self.properties={}
 		self.invertpins=[]
@@ -189,7 +190,7 @@ class EdifCell(Cell):
 			p=self.ports[pname]
 			for (pin,d,ob,opin) in p.connections:
 				if d==OUTPUT:
-					inv=LogicFunction(["10","01"],[p+"_inv_input",p+"_inv_output"],name=p+"_inv")
+					inv=self.device.LogicFunction(["10","01"],[p+"_inv_input",p+"_inv_output"],name=p+"_inv")
 					self.content.append(inv)
 					p.disconnectfrom(pin,ob,opin)
 					p.connectto(pin,inv,p+"_inv_input")
@@ -263,7 +264,7 @@ class EdifCell(Cell):
 			if i[0] == "port":
 				p=Port(i[1:]) #FIXME: should we get rid of Port? It is used just for parsing.
 				#print "\n\n",i[1:]
-				pin=IOPin(p.direction,p.name,eliminable=self.islib)
+				pin=self.device.IOPin(p.direction,p.name,eliminable=self.islib)
 				pin.name=p.name
 				self.ports[p.name]=pin
 				self.content.append(pin)
@@ -283,10 +284,12 @@ class Edif:
 	"""
 		EDIF parser
 	"""
-	def __init__(self,content):
+	def __init__(self,device,content):
 		"""
+			deviceclass is the name of the device we are using
 			content is the content of the EDIF file
 		"""
+		self.device=device
 		edif=str2sexpr(content)[0]
 		#print edif
 		assert edif[0] == "edif", "is it really an EDIF file?"
@@ -320,7 +323,7 @@ class Edif:
 				else:
 					libs=self.libs
 					libname=None
-				lib[cell[1]]=EdifCell(cell[1],cell[2:],libname,libs)
+				lib[cell[1]]=EdifCell(cell[1],cell[2:],libname,libs,device=self.device)
 			elif cell[0] == "ediflevel":
 				assert cell[1] == '0', "we know only edif level 0"
 			elif cell[0] == "technology":

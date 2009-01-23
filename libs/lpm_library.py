@@ -41,11 +41,11 @@ class Generator:
 		gener=getattr(self,lpm_type,None)
 		assert gener , "No generator found for " + self.properties['lpm_type']
 		gener()
-		print "generating pins for",self.name,self.ports.items()
+		#print "generating pins for",self.name,self.ports.items()
 		for (name,pin) in self.ports.items():
 			pdir = pin.direction
 			for ob in self.content:
-				#print "ob=",ob,ob.vars
+				#print "ob=",ob
 				if ob == pin:
 					continue
 				if name in ob.vars:
@@ -93,7 +93,7 @@ class Generator:
 		matrix=binary(value,width)
 		pins=[]
 		pins=self.makebus('result%u',width)
-		self.content.append(LogicFunction([matrix],pins,0,name="lpm_const%s"%value))
+		self.content.append(self.device.LogicFunction([matrix],pins,0,name="lpm_const%s"%value))
 
 	def lpm_mux(self):
 		"""
@@ -121,7 +121,7 @@ class Generator:
 				sel=binary(s,swidth)
 				input="-"*(width*s)+out+"-"*(width*(size-s-1))
 				matrix.append(input+sel+out)
-		self.content.append(LogicFunction(matrix,vars,numinputs,name="mux %ux%u"%(width,size)))
+		self.content.append(self.device.LogicFunction(matrix,vars,numinputs,name="mux %ux%u"%(width,size)))
 
 	def lpm_or(self):
 		"""
@@ -150,7 +150,7 @@ class Generator:
 		#for i in matrix:
 		#	print i
 		#print vars,ws
-		self.content.append(LogicFunction(matrix,vars,ws,name="or"))
+		self.content.append(self.device.LogicFunction(matrix,vars,ws,name="or"))
 			
 	def lpm_inv(self):
 		"""
@@ -163,16 +163,16 @@ class Generator:
 			line=binary(i,width)+binary((inf-1)^i,width)
 			matrix.append(line)
 		vars=self.makebus("data%u",width)+self.makebus("result%u",width)
-		self.content.append(LogicFunction(matrix,vars,width,name="inv"))
+		self.content.append(self.device.LogicFunction(matrix,vars,width,name="inv"))
 			
 	def lpm_ff(self):
 		"""
 			LPM_FF megafunction
 			implement lpm_width number of D flip-flops,
 			and the necessary switching logic
+			calls device's createFlipFlops to do the job
 		"""
 		rd={}
-		#FIXME should have been called the device's generator for flip-flop instead of constructing it here
 		width=self.getprop('lpm_width')
 		have_enable=self.hasportwithname("enable")
 		have_sset=self.hasportwithname("sset")
@@ -180,31 +180,11 @@ class Generator:
 		have_testenab=self.hasportwithname("testenab")
 		have_testin=self.hasportwithname("testin")
 		have_testout=self.hasportwithname("testout")
-		assert not (have_testenab or have_testin or have_testout), "Test port not yet implemented"
 		fftype=self.getprop('lpm_fftype','DFF')
-		assert fftype=='DFF', "only D flip-flop is implemented yet"
 		pvalue=self.getprop('lpm_pvalue',0)
-		for bit in range(width):
-			RD={"D":"data%u"%bit, "clock":"inclock", "Q":"q%u"%bit,"/Q":"/q%u"%bit}
-			c=DFlipFlop(renamedict=RD,initial=int((pvalue&(2 ** bit))>0),name="flipflop%u"%bit)
-			self.content.append(c)
-		funcs=[]
-		andtable=[ "000", "010", "100", "111"]
-		onetable=[ "00", "11"]
-		if have_enable:
-			clk=LogicFunction(andtable,["enable","clock","inclock"],2)
-		else:
-			clk=LogicFunction(onetable,["clock","inclock"],2)
-		
-		if have_sset:
-			f=LogicFunction(andtable,["sset","inclock","aset"],2)
-			clk=clk.mold(f)
-		if have_sclr:
-			f=LogicFunction(andtable,["sclr","inclock","aclr"],2)
-			clk=clk.mold(f)
-		#print clk
-		clk.name="clk"
-		self.content.append(clk)
+		assert not (have_testenab or have_testin or have_testout), "Test port not yet implemented"
+		assert fftype=='DFF', "only D flip-flop is implemented yet"
+		self.content.extend(self.device.createFlipFlops("FF",width,fftype,pvalue,have_enable,have_sset,have_sclr,have_testenab,have_testin,have_testout))
 		
 		
 	def lpm_add_sub(self):
@@ -317,7 +297,7 @@ class Generator:
 
 						#checkline(line,vars)
 						matrix.append(line)
-		f=LogicFunction(matrix,vars,len(inputs),name="adder")
+		f=self.device.LogicFunction(matrix,vars,len(inputs),name="adder")
 		f.simplify()
 		self.content.append(f)
 

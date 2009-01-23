@@ -2,7 +2,7 @@
 	cells and optimisations specific to 22V10 GAL
 """
 
-from demszky import Cell,Port
+from bistromatic import IOPin, LogicFunction, AbstractObject
 
 dRows= {
 	23: range(44/44+1,396/44+1),
@@ -30,33 +30,74 @@ oeRows={
 	14: [5368/44],
 	}
 
-class Device:
+class Technology:
 	"""
-		class for devices
-	"""
-	pass
-class GAL22V10(Device):
-	"""
+		mix-in class of Cell describing a GAL22V10
 		22V10 have
 			10 input pins
 			10 I/O pins
 			10 OLMC-s attached to I/O pins
 			a 132x44 and-array
 	"""
-	def __init__(self,interface,cells):
-		Device.__init__(self,interface,cells)
+	def __init__(self):
+		"""
+		initializing our structures
+		"""
+		self.LogicFunction=LogicFunction
+		self.IOPin=IOPin
+		self.partname="GAL22V10"
 		self.OLMCs={}
 		self.dRows=dRows
 		self.oeRows=oeRows
+
+	def createFlipFlops(self,name,width,fftype,pvalue,have_enable,have_sset,have_sclr,have_testenab,have_testin,have_testout):
+		"""
+		creates an array of flip-flops
+		"""
+		content=[]
+                for bit in range(width):
+                        RD={"D":"data%u"%bit, "Q":"q%u"%bit}
+                        #c=OLMC(renamedict=RD,initial=int((pvalue&(2 ** bit))>0),name="flipflop%u"%bit)
+                        c=OLMC("%s%u"%(name,bit),self,haveflipflop=True)
+			for (orig,newname) in RD.items():
+				c.renamevar(orig,newname)
+			
+                        content.append(c)
+		print "FIXME: this is buggy!"
+		print content
+		return content
+                funcs=[]
+                andtable=[ "000", "010", "100", "111"]
+                onetable=[ "00", "11"]
+                if have_enable:
+                        clk=self.LogicFunction(andtable,["enable","clock","inclock"],2)
+                else:
+                        clk=self.LogicFunction(onetable,["clock","inclock"],2)
+
+                if have_sset:
+                        f=self.LogicFunction(andtable,["sset","inclock","aset"],2)
+                        clk=clk.mold(f)
+                if have_sclr:
+                        f=self.LogicFunction(andtable,["sclr","inclock","aclr"],2)
+                        clk=clk.mold(f)
+                #print clk
+                clk.name="clk"
+                content.append(clk)
+		return(content)
+
 	def checkPins(self):
-		for (pinno,pin) in self.pins.values():
-			if pinno == 12 or pinno>23:
-				raise "Illegal pin"
-			elif pinno < 14 and pin.isOutput():
-				raise "Illegal pin direction"
-			elif pinno >= 14:
-				if not pin.isOutput():
-					self.OLMCs(pinno).setInput()
+		"""
+			Checks whether pins are okay.
+		"""
+		portlist=self.ports.keys()
+		for i in range(24):
+			pname="PORT%d"%i
+			if i == 12:
+				assert not ((pname in portlist) and (self.ports[pname].connections)), "illegal pin connected: %s"%pname
+			assert pname in portlist, "port %s is missing"%pname
+			portlist.remove(pname)
+		for pname in portlist:
+			assert not (self.ports[pname].connections), "illegal pin connected: %s"%pname
 	def registerOlmc(self,pinno,olmc):
 		if pinno < 14:
 			raise "Illegal pin"
@@ -64,7 +105,7 @@ class GAL22V10(Device):
 			raise "multiple OLMCs in one slot"
 		self.OLMCs[pinno]=olmc
 
-class OLMC(Cell):
+class OLMC(AbstractObject):
 	"""
 		An OLMC
 		It drives a pin, and can contain a flip-flop.
@@ -78,33 +119,27 @@ class OLMC(Cell):
 		 Q:     flip-flop output
                  /Q:	flip-flop output inverted
 	"""
-	def __init__(self,name, device, properties=None):
+	def __init__(self,name, device, haveflipflop=None,inverted=None,input=None):
 		"""
-			properties:
-				haveflipflop: (0: no, 1: yes, None: undecided)
-				inverted: (0: no, 1: yes, None: undecided)
-				input: (0: no, 1: yes, None: undecided)
+			haveflipflop: (0: no, 1: yes, None: undecided)
+			inverted: (0: no, 1: yes, None: undecided)
+			input: (0: no, 1: yes, None: undecided)
 		"""
-		self.type="OLMC"
+		vars=["D","OE","PIN","Q"]
+		AbstractObject.__init__(self,vars,ilen=3,iolen=1,objtype="OLMC",name=name)
 		self.device=device
 		self.name=name
-		self.haveflipflop=None
-		self.inverted=None
-		self.input=None
+		self.haveflipflop=haveflipflop
+		self.inverted=inverted
+		self.input=input
 		self.OlmcSlot=None
-		if properties:
-			for (name,value) in properties.values():
-				if name == "haveflipflop":
-					self.haveflipflop=value
-				elif name == "inverted":
-					self.inverted=value
-				elif name == "input":
-					self.input=value
-				else:
-					raise "Unknown Property"
-		functions = (("D",INPUT), ("PIN",TRISTATE), ("OE",INPUT), ("Q",OUTPUT), ("/Q",TRISTATE))
-		for (name,direction) in functions:
-			self.attachPort(name,Port(direction,name))
+
+	def copy(self):
+		"""
+		copy constructor
+		"""
+		n=OLMC(self.name,self.device,self.haveflipflop,self.inverted,self.input)
+		return n
 
 	def optimize(self,function,connectedpads):
 		"""
@@ -164,7 +199,7 @@ class OLMC(Cell):
 			#buried cell
 			self.OlmcSlot=self.device.getUnusedOlmc()
 
-class Switch(Cell):
+class Switch:
 	"""
 		Switch matrix.
 		Initially a switch matrix is a logic expression. It have inputs, outputs, and a truth table.

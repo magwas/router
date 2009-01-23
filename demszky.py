@@ -1,14 +1,21 @@
 #!/usr/bin/python
 
-import libs
+import libs,imp
 from edif import Edif
 from bistromatic import directions, OUTPUT
 from time import clock
 import sys
 
-f=open(sys.argv[1])
+(myself,devname,file)=sys.argv
+
+devfile="devices/%s.py"%devname
+m=open(devfile)
+module=imp.load_module(devname,m,devfile,('.py','r',imp.PY_SOURCE))
+device=module.Technology()
+
+f=open(file)
 lisp=f.read()
-edif=Edif(lisp)
+edif=Edif(device,lisp)
 
 objlist=edif.libs['design']['device'].enumobjs()
 
@@ -54,10 +61,10 @@ while optimized:
 		if optimized:
 			break
 
+while None in objlist:
+	objlist.remove(None)
 print "************************ Result **********************"
 print objlist
 for i in objlist:
-	if i is None:
-		continue
 	print i.name,i._print()
 
