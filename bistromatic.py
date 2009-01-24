@@ -356,7 +356,7 @@ class LogicFunction(AbstractObject):
 	"""
 	A logic function contains a set of inputs, a set of outputs, and the truth table.
 	"""
-	def __init__(self,terms=None,vars=None,ilen=0,name=""):
+	def __init__(self,terms=None,vars=None,ilen=0,name="",matrix=None):
 		"""
 			terms is a dictionary of (name: table) items, where 
 				name is the name of output
@@ -372,11 +372,27 @@ class LogicFunction(AbstractObject):
 		"""
 		if vars==None:
 			vars=[]
-		if terms==None:
-			terms={}
 		AbstractObject.__init__(self,vars,ilen,objtype="LogicFunction",name=name)
-		self.terms=terms
+		if (terms is None):
+			self.terms={}
+			if (matrix is not None):
+				self.loadmatrix(matrix)
+		else:
+			self.terms=terms
 		self.check()
+	def loadmatrix(self,matrix):
+		"""
+			loads a matrix into terms
+		"""
+		outvars=self.vars[self.ilen:]
+		for v in outvars:
+			self.terms[v]=[]
+		for line in matrix:
+			base=line[:self.ilen]
+			for v in outvars:
+				p=self.vars.index(v)
+				l=base+line[p]
+				self.terms[v].append(l)
 	def copy(self):
 		n=LogicFunction(self.terms.copy(),[]+self.vars,self.ilen,name=self.name)
 		return n

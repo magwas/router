@@ -35,7 +35,7 @@ class Generator:
 						ob.connectto(name,pin,name)
 					assert odir & pdir , "problem with directions: %s %s"%(pin._print(),ob._print())
 					#print ob.connections,pin.connections
-			print pin,pin.connections
+			#print pin,pin.connections
 		#for c in self.content:
 		#	print c
 
@@ -72,7 +72,7 @@ class Generator:
 		matrix=binary(value,width)
 		pins=[]
 		pins=self.makebus('result%u',width)
-		self.content.append(self.device.LogicFunction([matrix],pins,0,name="lpm_const%s"%value))
+		self.content.append(self.device.LogicFunction(matrix=[matrix],vars=pins,ilen=0,name="lpm_const%s"%value))
 
 	def lpm_mux(self):
 		"""
@@ -100,7 +100,7 @@ class Generator:
 				sel=binary(s,swidth)
 				input="-"*(width*s)+out+"-"*(width*(size-s-1))
 				matrix.append(input+sel+out)
-		self.content.append(self.device.LogicFunction(matrix,vars,numinputs,name="mux %ux%u"%(width,size)))
+		self.content.append(self.device.LogicFunction(matrix=matrix,vars=vars,ilen=numinputs,name="mux %ux%u"%(width,size)))
 
 	def lpm_or(self):
 		"""
@@ -129,7 +129,7 @@ class Generator:
 		#for i in matrix:
 		#	print i
 		#print vars,ws
-		self.content.append(self.device.LogicFunction(matrix,vars,ws,name="or"))
+		self.content.append(self.device.LogicFunction(matrix=matrix,vars=vars,ilen=ws,name="or"))
 			
 	def lpm_inv(self):
 		"""
@@ -142,7 +142,7 @@ class Generator:
 			line=binary(i,width)+binary((inf-1)^i,width)
 			matrix.append(line)
 		vars=self.makebus("data%u",width)+self.makebus("result%u",width)
-		self.content.append(self.device.LogicFunction(matrix,vars,width,name="inv"))
+		self.content.append(self.device.LogicFunction(matrix=matrix,vars=vars,ilen=width,name="inv"))
 			
 	def lpm_ff(self):
 		"""
@@ -276,7 +276,7 @@ class Generator:
 
 						#checkline(line,vars)
 						matrix.append(line)
-		f=self.device.LogicFunction(matrix,vars,len(inputs),name="adder")
+		f=self.device.LogicFunction(matrix=matrix,vars=vars,ilen=len(inputs),name="adder")
 		f.simplify()
 		self.content.append(f)
 

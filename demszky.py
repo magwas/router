@@ -15,6 +15,7 @@ class DemszkysMom:
 	def optimize(self):
 		optimized=True
 		while optimized:
+			print "optimizing step",self
 			optimized=False
 			for i in range(len(self.objlist)):
 				lf=self.objlist[i]
@@ -29,9 +30,9 @@ class DemszkysMom:
 					else:
 						r=lf.joined(pin,oob,opin)
 					if r is not None:
-						print "joined",lf,pin,oob,opin,d
-						print "result=",r
-						print "elapsed:",clock()-time
+						#print "joined",lf,pin,oob,opin,d
+						#print "result=",r
+						#print "elapsed:",clock()-time
 						(addend,minuend)=r
 						for o in minuend:
 							#print "removing",o
@@ -49,10 +50,12 @@ class DemszkysMom:
 		while None in self.objlist:
 			self.objlist.remove(None)
 	def __str__(self):
+		str=""
 		for i in self.objlist:
 			if i is None:
 				continue
-			print i.name,i._print()
+			str+="%s: %s\n"%(i.name,i._print())
+		return str
 
 class Demszky(DemszkysMom):
 	"""
@@ -75,14 +78,16 @@ class Demszky(DemszkysMom):
 		lisp=f.read()
 		f.close()
 		self.edif=Edif(device,lisp)
-		self.objlist=edif.libs['design']['device'].enumobjs()
-		self.optimize()
+		self.objlist=self.edif.libs['design']['device'].enumobjs()
 
 if __name__ == "__main__":
 	(myself,devname,file)=sys.argv
 
 	d=Demszky(devname,file)
+	print "*********Begin**********"
 	print d
-	d.optimize
+	print "*********Optimizing**********"
+	d.optimize()
+	print "*********Result**********"
 	print d
 
