@@ -4,6 +4,7 @@
 	I do not understand it, so I have implemented what I figured out, which may or may not resembles to espresso.
 """
 
+from itoa import binary
 
 dirs = [
 "notconnected",
@@ -355,30 +356,102 @@ class LogicFunction(AbstractObject):
 	"""
 	A logic function contains a set of inputs, a set of outputs, and the truth table.
 	"""
-	def __init__(self,table,vars,ilen=None,name=""):
+	def __init__(self,terms=None,vars=None,ilen=0,name=""):
 		"""
-			table is the truth table
+			terms is a dictionary of (name: table) items, where 
+				name is the name of output
+				table is the truth table of that output (true plan)
 			ilen is the number of input variables, if appicable
 			vars is a list of variable names. If applicable, inputs first.
-			iolen is always zero
+			example:
+				{not=^a,and= a&b,or = a | b} is constructed as:
+				LogicFunction(["a","b","not","and","or"],
+					{"not":["0-1"],
+					"and":["111"],
+					"or":["-11"],["1-1"},2)
 		"""
+		if vars==None:
+			vars=[]
+		if terms==None:
+			terms={}
 		AbstractObject.__init__(self,vars,ilen,objtype="LogicFunction",name=name)
-		self.table=table
+		self.terms=terms
 		self.check()
 	def copy(self):
-		n=LogicFunction([]+self.table,[]+self.vars,self.ilen,name=self.name)
+		n=LogicFunction(self.terms.copy(),[]+self.vars,self.ilen,name=self.name)
 		return n
 
+	def value(self,inputs,inputbuses=None,outputbuses=None):
+		"""
+			return the logic function's value for the given inputs
+			inputbuses is a list of input variables or a list of thereof
+			outputbuses is the same for output variables
+			inputs is a list of values for output buses
+		"""
+		if inputbuses is None:
+			inputbuses=self.vars[self.ilen:]
+		if outputbuses is None:
+			outputbuses=self.vars[:self.ilen]
+		inputval=['0']*self.ilen
+		for i in range(len(inputbuses)):
+			ival=inputs[i]
+			if type(ival) != str:
+				ival=int(ival)
+			else:
+				ival=int(ival,2)
+
+			bus=inputbuses[i]
+			if type(bus) == list:
+				ival=binary(ival,len(bus))
+				for j in range(len(bus)):
+					line=bus[j]
+					pos=self.vars.index(line)
+					inputval[pos]=ival[j]
+			else:
+				pos=self.vars.index(bus)
+				inputval[pos]=binary(ival,1)
+		input="".join(inputval)
+		outputvars=self.vars[self.ilen:]
+		outputs=[None]*len(outputvars)
+		#print input,outputvars
+		res=[]
+		for i in range(len(outputs)):
+			#print "term",outputvars[i]
+			outputs[i]=self.resultfor(input,outputvars[i])
+		#print "outputs=",outputs
+		for i in range(len(outputbuses)):
+			bus=outputbuses[i]
+			if type(bus) == list:
+				r=0
+				for v in bus:
+					pos=outputvars.index(v)
+					r= r <<1
+					r=r+int(outputs[pos])
+				res.append(r)
+			else:
+				pos=outputvars.index(bus)
+				res.append(outputs[pos])
+		return(res)
+	def renamevar(self,fromname,toname):
+		"""
+			renames a variable
+		"""
+		AbstractObject.renamevar(self,fromname,toname)
+		if fromname in self.terms:
+			self.terms[toname]=self.terms[fromname]
+			del(self.terms[fromname])
+
 	def _print(self):
-		return "%s([\n'%s'],%s,%s,%s,%s)"%(self.objtype,"',\n'".join(self.table),self.vars,self.funcdict,self.ilen,self.connections)
-	def resultfor(self,input):
+		return "%s([\n'%s'],%s,%s,%s,%s)"%(self.objtype,self.terms,self.vars,self.funcdict,self.ilen,self.connections)
+	def resultfor(self,input,output):
 		"""
-			returns the result for a given input
+			returns the result for a given input on output
 		"""
-		for line in self.table:
+		for line in self.terms[output]:
+			#print line
 			if self.rowIsEqual(line,input,len(input)):
-				return line[len(input):]
-		return "-"*(len(self.vars)-self.ilen)
+				return line[-1]
+		return '0'
 
 	def rowIsEqual(self,A,B,len):
 		"""
@@ -394,17 +467,26 @@ class LogicFunction(AbstractObject):
 			
 	def check(self):
 		"""
-			check if there is no inconsistency in the table
+			check if there is no inconsistency in the terms
 		"""
 		if not self.ilen:
 			return
-		for rowa in range(len(self.table)-1):
-			for rowb in range(rowa+1,len(self.table)):
-				A=self.table[rowa]
-				B=self.table[rowb]
-				assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen:] != B[self.ilen:])), "inconsistency: %s %s len=%u"%(A,B,self.ilen)
+		for var in self.vars[self.ilen:]:
+			table=self.terms[var]
+			for rowa in range(len(table)-1):
+				for rowb in range(rowa+1,len(table)):
+					A=table[rowa]
+					B=table[rowb]
+					assert not (self.rowIsEqual(A,B,self.ilen) and (A[self.ilen:] != B[self.ilen:])), "inconsistency: %s %s len=%u"%(A,B,self.ilen)
 
 	def simplify(self,check=None):
+		#print "before:",self,self.terms
+		for (key,table) in self.terms.items():
+			self.terms[key]=self._simplify(table)
+		#print "after:",self,self.terms
+		if True or check:
+			self.check()
+	def _simplify(self,table):
 		"""
 			AB+/AB=B
 			where n<=ilen
@@ -420,18 +502,19 @@ class LogicFunction(AbstractObject):
 		while optimized:
 			optimized=False
 			nt=[]
-			for row in range(len(self.table)-1):
-				a=self.table[row]
+			#print "table",table
+			for row in range(len(table)-1):
+				a=table[row]
 				#print a
 				if a is None:
 					continue
-				if a in self.table[row+1:]:
+				if a in table[row+1:]:
 					optimized=True
 					x=row
-					while a in self.table[x+1:]:
-						x=self.table[x+1:].index(a)+x+1
-						self.table[x]=None
-					#print self.table,nt
+					while a in table[x+1:]:
+						x=table[x+1:].index(a)+x+1
+						table[x]=None
+					#print table,nt
 				for p in range(self.ilen):
 					#print a,p
 					if '0' == a[p]:
@@ -440,14 +523,15 @@ class LogicFunction(AbstractObject):
 						target=a[:p]+'0'+a[p+1:]
 					else:
 						continue
-					if target in self.table[row+1:]:
-						self.table[row]=None
+					#print "target=",target
+					if target in table[row+1:]:
+						table[row]=None
 						nt.append(a[:p]+'-'+a[p+1:])
 						optimized=True
 						x=row
-						while target in self.table[x+1:]:
-							x=self.table[x+1:].index(target)+x+1
-							self.table[x]=None
+						while target in table[x+1:]:
+							x=table[x+1:].index(target)+x+1
+							table[x]=None
 						#print self.table,nt
 						break
 					for r in range(self.ilen):
@@ -455,30 +539,33 @@ class LogicFunction(AbstractObject):
 							continue
 						t1=target[:r]+'1'+target[r+1:]
 						t2=target[:r]+'0'+target[r+1:]
-						if (t1 in self.table[row+1:]) and ( t2 in self.table[row+1:]):
+						if (t1 in table[row+1:]) and ( t2 in table[row+1:]):
+							#print "t1,t2",t1,t2
 							optimized=True
 							opt=True
-							self.table[row]=None
-							nt.append(target[:r]+'-'+target[r+1:])
+							#table[row]=None
+							#print "r,target",r,target
+							newrow=target[:r]+'-'+target[r+1:]
+							#print "newrow",newrow
+							nt.append(newrow)
 							x=row
-							while t1 in self.table[x+1:]:
-								x=self.table[x+1:].index(t1)+x+1
-								self.table[x]=None
+							while t1 in table[x+1:]:
+								x=table[x+1:].index(t1)+x+1
+								table[x]=None
 							x=row
-							while t2 in self.table[x+1:]:
-								x=self.table[x+1:].index(t2)+x+1
-								self.table[x]=None
-							#print self.table,nt
-			while None in self.table:
-					self.table.remove(None)
-			self.table=nt+self.table
-			#print self.table
-		#print "after:",self
-		if True or check:
-			self.check()
+							while t2 in table[x+1:]:
+								x=table[x+1:].index(t2)+x+1
+								table[x]=None
+							#print table,nt
+			while None in table:
+					table.remove(None)
+			table=nt+table
+			#print table
+		return table
 
 	def expand(self,line):
 		"""
+			FIXME: it is not needed
 		"""
 		pos=line.find('-')
 		if -1 == pos:
@@ -488,92 +575,118 @@ class LogicFunction(AbstractObject):
 		l0[pos]='0'
 		l1[pos]='1'
 		return self.expand("".join(l0))+self.expand("".join(l1))
-	def permutate(self,other):
+
+	def permutate(self,selfterm,otherterm,locks):
 		"""
 			permutates the domain of self and other
+			for outputs selfout and otherout
+			output of self should be equal to input in locked positions
 			expands '-'
 			returns the permutated function
 		"""
+		#print "permutate",selfterm,otherterm
 		newdom=[]
-		len1=self.ilen
-		len2=other.ilen
-		for line1 in self.table:
-			for line2 in other.table:
-				line=line1[:len1]+line2[:len2]
-				lines=self.expand(line)
-				newdom+=lines
-		newvars=self.vars[:len1]+other.vars[:len2]
-		return LogicFunction(newdom,newvars,len(newvars))
+		len1=len(selfterm[0])
+		len2=len(otherterm[0])
+		for line1 in selfterm:
+			for line2 in otherterm:
+				okay=True
+				line=line1+line2
+				for (l1,l2) in locks:
+					p1=line[l1]
+					p2=line[l2]
+					if (p1 == p2 ):
+						pass
+					elif p1 == '-':
+						line=line[:l1]+p2+line[l1+1:]
+					elif p2 == '-':
+						line=line[:l2]+p1+line[l2+1:]
+					else:
+						okay=False
+						break
+				if okay:
+					#print line
+					#lines=self.expand(line)
+					newdom.append(line)
+		#print newdom
+		return newdom
 
-	def computeresult(self,other):
+	def filter(self,table,mapping):
 		"""
-			computes the result columns over domain of other
-		"""
-		#print "computeresult",self,other
-		#print "mapping=",other.createmapping(self)
-		dom2=other.filter(other.createmapping(self))
-		#print "dom2",dom2
-		result=[]
-		for line in dom2.table:
-			result.append(self.resultfor(line))
-		dom2.table=result
-		dom2.vars=self.getOutputs()
-		dom2.ilen=0
-		return dom2
-			
-	def filter(self,filterlist):
-		"""
-			rearranges columns in dom according to filterlist
+			rearranges columns in table according to filterlist
+			and adds result
 		"""
 		newdom=[]
 		newinputs=[]
-		#print "filter",self,filterlist
-		for line in self.table:
+		for line in table:
 			row=[]
-			for i in filterlist:
+			for i in mapping:
 				row.append(line[i])
+			row.append(line[-1])
 			newdom.append("".join(row))
-		for i in filterlist:
-			newinputs.append(self.vars[i])
-		#print "filter",newdom,newinputs
-		f=LogicFunction(newdom,newinputs,len(newinputs))
-		return f
+		return newdom
 
-	def reduceinputs(self):
+	def prepare_join(self,myoutput,other,otherinput):
 		"""
-			inputlist is a list of input names
-			we filter out duplicate inputs, and then filter the domain accordingly
-			return new inputlist and new domain
+			prepares join/mold operation
+			creates a new logic function which can be filled up with the terms necessary
+			creates mapping for filtering operation
+			creates lock list for permutation
 		"""
-		newinputs=[]
-		filterlist=[]
-		for i in range(self.ilen-1):
-			reduce=0
-			for j in range(i+1,self.ilen):
-				if self.vars[i] == self.vars [j]:
-					#print i,"=",j
-					reduce=1
-					break
-			if not reduce:
-				newinputs.append(self.vars[i])
-				filterlist.append(i)
-		i=i+1
-		newinputs.append(self.vars[i])
-		filterlist.append(i)
-		return self.filter(filterlist)
+		# create domain
+		result=LogicFunction(name=self.name+'+'+other.name)
 
-	def addcols(self,other):
-		"""
-			adds the columns of other function to ourselves
-			the other function's output is appended to self's output
-		"""
-		assert len(self.table) == len(other.table), "incompatible columns to add"
-		res=[]
-		for i in range(len(self.table)):
-			self.table[i]=self.table[i]+other.table[i]
-		self.vars=self.vars+other.vars
+		# create a consolidated variable list
+		# newinputs are the union of two inputs, minus otherinput
+		# newoutputs are the union of two outputs minus myoutput
+		# inputs might be common, outputs should not
+		# common domain will be generated by permutating rows of terms of self and other
+		# so we need a mapping which maps other.vars[:ilen] to
+		# myinputs+[otherinput]+other[vars]
+		# 
+		selfinputs=self.vars[:self.ilen]
+		otherinputs=other.vars[:other.ilen]
+		selfoutputs=self.vars[self.ilen:]
+		otheroutputs=other.vars[other.ilen:]
+
+		for i in selfinputs:
+			if i in otherinputs:
+				otherinputs.remove(i)
+		if otherinput is not None:
+			otherinputs.remove(otherinput)
+		assert set()==set(selfoutputs).intersection(set(otheroutputs)), "output collision between %s(%s) and %s(%s)"%(self,selfoutputs,other,otheroutputs)
+		if myoutput is not None:
+			selfoutputs.remove(myoutput)
+		result.vars=selfinputs+otherinputs+selfoutputs+otheroutputs
+		result.ilen=len(selfinputs)+len(otherinputs)
+		mapping=[]
+		mapbase=selfinputs+[otherinput]+other.vars[:other.ilen]
+		for v in result.vars[:result.ilen]:
+			mapping.append(mapbase.index(v))
+		locks=[]
+		# locks are the position pairs where the same value should be when permutating
+		#print "selfinputs",selfinputs
+		#print "otherinput",otherinput
+		#print "other.vars",other.vars
+		#print "mapbase",mapbase
+		for x in set(mapbase):
+			p1=mapbase.index(x)+1
+			if x in mapbase[p1:]:
+				#print p1,x
+				p2=mapbase[p1:].index(x)+p1
+				locks.append((p1-1,p2))
+		#print "locks",locks
+		#print "mapping=",mapping
+
+		for ou in selfoutputs:
+			result.terms[ou]=[]
+			for line in self.terms[ou]:
+				result.terms[ou].append(line[:self.ilen]+'-'*len(otherinputs)+line[-1:])
+			#print "self term",ou,result.terms[ou]
 			
-	def join(self,myoutput,other,otherinput):
+		return (result,mapping,locks)
+
+	def join(self,	myoutput,other,otherinput):
 		"""
 		returns a function created by the equation
 		self.myoutput=other.otherinput
@@ -585,66 +698,53 @@ class LogicFunction(AbstractObject):
 		first we create the domain a x (c0,c)
 		than we compute F(a)|b0,F(a)|b and G(c0,F(a)|b) on domain
 		than we reduce it.
+		for outputs of self (-myoutput), the term is the same, just '-'-s inserted for new variables
+		for outputs of other, the term is on the new domain, and it is FoG
 		"""
 		r = other.joined(otherinput,self,myoutput)
 		if None != r:
 			return r
-		#print "joining %s:%s -> %s:%s"%(self,myoutput,other,otherinput)
+		#print "joining %s(%s):%s -> %s(%s):%s"%(self,self._print(),myoutput,other,other._print(),otherinput)
 		if other.objtype != 'LogicFunction':
 			return None
 		#print "joining",self._print(),other._print()
-		# create domain
-		domain=self.permutate(other)
-		domain=domain.reduceinputs()
-		# compute F over the domain
-		Fout=self.computeresult(domain)
-		# join Fout to the domain
-		domain.addcols(Fout)
-		# now we can compute G(c0,F(a)|b) over the domain
-		#print "domain=",domain
-		cindex=domain.vars.index(myoutput)
-		bindex=domain.vars.index(otherinput)
-		domain.vars[bindex]=myoutput
-		domain.vars[cindex]=otherinput
-		ilen=domain.ilen
-		domain.ilen=cindex+1
-		Gout=other.computeresult(domain)
-		# join Gout to the domain
-		domain.addcols(Gout)
-		domain.check()
-		# drop column for b and c
-		vlist=range(len(domain.vars))
-		vlist[bindex]=None
-		vlist[cindex]=None
-		vlist.remove(None)
-		vlist.remove(None)
-		#ilen=domain.ilen-1
-		domain=domain.filter(vlist)
-		domain.ilen=ilen-1
-		#print domain._print()
-		domain.check()
-		domain.simplify()
-		domain.check()
-		domain.name=self.name+'+'+other.name
+		(result,mapping,locks)=self.prepare_join(myoutput,other,otherinput)
+
+		for ou in other.vars[other.ilen:]:
+			#print "ou=",ou
+			#print "myoutput=",myoutput
+			#print "myterms=",self.terms[myoutput]
+			#print "otherterms=",other.terms[ou]
+			#print "locks=",locks
+			#print "mapping=",mapping
+			permutated=self.permutate(self.terms[myoutput],other.terms[ou],locks)
+			#print "permutated=",permutated
+			result.terms[ou]=self.filter(permutated,mapping)
+			#print "other term",ou,result.terms[ou]
+		#print result._print()
+
+		result.check()
+		result.simplify()
+		result.check()
 
 		disc=set()
 		con=set()
 		for (pin,d,ob,opin) in self.connections:
 			if d == INPUT:
 				disc.add((ob,opin,self,pin))
-				con.add((ob,opin,domain,pin))
+				con.add((ob,opin,result,pin))
 			elif d == OUTPUT:
 				disc.add((self,pin,ob,opin))
 				if pin != myoutput:
-					con.add((domain,pin,ob,opin))
+					con.add((result,pin,ob,opin))
 		for (pin,d,ob,opin) in other.connections:
 			if d == INPUT:
 				disc.add((ob,opin,other,pin))
 				if pin != otherinput:
-					con.add((ob,opin,domain,pin))
+					con.add((ob,opin,result,pin))
 			elif d == OUTPUT:
 				disc.add((other,pin,ob,opin))
-				con.add((domain,pin,ob,opin))
+				con.add((result,pin,ob,opin))
 
 		for (o1,pin1,o2,pin2) in disc:
 			o1.disconnectfrom(pin1,o2,pin2)
@@ -654,8 +754,8 @@ class LogicFunction(AbstractObject):
 		rl=[other]
 		if not self.hasoutputs():
 			rl.append(self)
-		#print "result",domain
-		return ([domain],rl)
+		#print "result",result
+		return ([result],rl)
 
 	def mold(self,other):
 		"""
@@ -670,17 +770,45 @@ class LogicFunction(AbstractObject):
 		"""
 		if other.objtype != 'LogicFunction':
 			return None
-		# create domain
-		domain=self.permutate(other)
-		domain=domain.reduceinputs()
-		# compute F over the domain
-		Fout=self.computeresult(domain)
-		Gout=other.computeresult(domain)
-		# join Fout to the domain
-		domain.addcols(Fout)
-		# join Gout to the domain
-		domain.addcols(Gout)
-		domain.simplify()
-		domain.check()
-		return domain
+		(result,mapping,locks)=self.prepare_join(None,other,None)
+
+		myterm=['-'*(self.ilen+1)]
+		for ou in other.vars[other.ilen:]:
+			permutated=self.permutate(myterm,other.terms[ou],locks)
+			result.terms[ou]=self.filter(permutated,mapping)
+			#print "other term",ou,result.terms[ou]
+		#print result._print()
+
+		result.check()
+		result.simplify()
+		result.check()
+
+		disc=set()
+		con=set()
+		for (pin,d,ob,opin) in self.connections:
+			if d == INPUT:
+				disc.add((ob,opin,self,pin))
+				con.add((ob,opin,result,pin))
+			elif d == OUTPUT:
+				disc.add((self,pin,ob,opin))
+				con.add((result,pin,ob,opin))
+		for (pin,d,ob,opin) in other.connections:
+			if d == INPUT:
+				disc.add((ob,opin,other,pin))
+				con.add((ob,opin,result,pin))
+			elif d == OUTPUT:
+				disc.add((other,pin,ob,opin))
+				con.add((result,pin,ob,opin))
+
+		for (o1,pin1,o2,pin2) in disc:
+			o1.disconnectfrom(pin1,o2,pin2)
+		for (o1,pin1,o2,pin2) in con:
+			o1.connectto(pin1,o2,pin2)
+
+		rl=[other]
+		if not self.hasoutputs():
+			rl.append(self)
+		#print "result",result
+		return ([result],[self,other])
+
 

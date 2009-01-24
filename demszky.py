@@ -6,65 +6,83 @@ from bistromatic import directions, OUTPUT
 from time import clock
 import sys
 
-(myself,devname,file)=sys.argv
 
-devfile="devices/%s.py"%devname
-m=open(devfile)
-module=imp.load_module(devname,m,devfile,('.py','r',imp.PY_SOURCE))
-device=module.Technology()
+class DemszkysMom:
+	"""
+		When I hear the expression 'P+R', I can't stop thinking about
+		the mother of the major of Budapest.
+	"""
+	def optimize(self):
+		optimized=True
+		while optimized:
+			optimized=False
+			for i in range(len(self.objlist)):
+				lf=self.objlist[i]
+				#print "optimizing",lf
+				if lf is None:
+					continue
+				for (pin,d,oob,opin) in lf.connections:
+					time=clock()
+					print "joining",lf,pin,oob,opin,d
+					if d == OUTPUT:
+						r=lf.join(pin,oob,opin)
+					else:
+						r=lf.joined(pin,oob,opin)
+					if r is not None:
+						print "joined",lf,pin,oob,opin,d
+						print "result=",r
+						print "elapsed:",clock()-time
+						(addend,minuend)=r
+						for o in minuend:
+							#print "removing",o
+							if o.connections:
+								o.forget()
+								print "trying to remove %s with living connections %s"%(o,o.connections)
+							j=self.objlist.index(o)
+							self.objlist[j]=None
+						self.objlist.extend(addend)
+						#print clock()-time,"seconds"
+						optimized=True
+						break
+				if optimized:
+					break
+		while None in self.objlist:
+			self.objlist.remove(None)
+	def __str__(self):
+		for i in self.objlist:
+			if i is None:
+				continue
+			print i.name,i._print()
 
-f=open(file)
-lisp=f.read()
-edif=Edif(device,lisp)
+class Demszky(DemszkysMom):
+	"""
+		Some say that the only thing we can be sure of is the direct
+		inheritance relationship described above;)
+	"""
+	def __init__(self,devicename,file):
+		"""
+			If we are talking about the beginnings, it must be told that he
+			did not start it as the corrupt incompetent politician like he is now.
+			He did and stand a lot. But unfortunately he is not among the very few
+			who could resist of adverse effects of law studies and being a political leader.
+		"""
+		devfile="devices/%s.py"%devicename
+		m=open(devfile)
+		module=imp.load_module(devicename,m,devfile,('.py','r',imp.PY_SOURCE))
+		device=module.Technology()
 
-objlist=edif.libs['design']['device'].enumobjs()
+		f=open(file)
+		lisp=f.read()
+		f.close()
+		self.edif=Edif(device,lisp)
+		self.objlist=edif.libs['design']['device'].enumobjs()
+		self.optimize()
 
-print "************************ Beginning with **********************"
-print objlist
-for i in objlist:
-	if i is None:
-		continue
-	print i.name,i._print()
+if __name__ == "__main__":
+	(myself,devname,file)=sys.argv
 
-print "************************ OPTIMIZING **********************"
-optimized=True
-while optimized:
-	optimized=False
-	for i in range(len(objlist)):
-		lf=objlist[i]
-		#print "optimizing",lf
-		if lf is None:
-			continue
-		for (pin,d,oob,opin) in lf.connections:
-			time=clock()
-			print "joining",lf,pin,oob,opin,d
-			if d == OUTPUT:
-				r=lf.join(pin,oob,opin)
-			else:
-				r=lf.joined(pin,oob,opin)
-			if r is not None:
-				print "joined",lf,pin,oob,opin,d
-				print "result=",r
-				print "elapsed:",clock()-time
-				(addend,minuend)=r
-				for o in minuend:
-					#print "removing",o
-					if o.connections:
-						o.forget()
-						print "trying to remove %s with living connections %s"%(o,o.connections)
-					j=objlist.index(o)
-					objlist[j]=None
-				objlist.extend(addend)
-				#print clock()-time,"seconds"
-				optimized=True
-				break
-		if optimized:
-			break
-
-while None in objlist:
-	objlist.remove(None)
-print "************************ Result **********************"
-print objlist
-for i in objlist:
-	print i.name,i._print()
+	d=Demszky(devname,file)
+	print d
+	d.optimize
+	print d
 
