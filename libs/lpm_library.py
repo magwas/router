@@ -71,7 +71,7 @@ class Generator:
 		value=self.getprop('lpm_cvalue')
 		matrix=binary(value,width)
 		pins=[]
-		pins=self.makebus('result%u',width)
+		pins=self.makebus('result%u',width,nochop=True)
 		self.content.append(self.device.LogicFunction(matrix=[matrix],vars=pins,ilen=0,name="lpm_const%s"%value))
 
 	def lpm_mux(self):
@@ -86,11 +86,11 @@ class Generator:
 		pipeline=self.getprop('lpm_pipeline',0)
 		assert pipeline == 0, "lpm_pipeline not yet implemented"
 		inputs=[]
-		outputs=self.makebus('result%u',width)
+		outputs=self.makebus('result%u',width,nochop=True)
 		for i in range(size):
 			for j in range(width):
 				inputs.append("data%ux%u"%(i,j))
-		sels=self.makebus("sel%u",swidth)
+		sels=self.makebus("sel%u",swidth,nochop=True)
 		vars=inputs+sels+outputs
 		numinputs=swidth+ws
 		matrix=[]
@@ -150,20 +150,26 @@ class Generator:
 			implement lpm_width number of D flip-flops,
 			and the necessary switching logic
 			calls device's createFlipFlops to do the job
+			there are so many configuration options, that we just throw self in
 		"""
-		rd={}
-		width=self.getprop('lpm_width')
-		have_enable=self.hasportwithname("enable")
-		have_sset=self.hasportwithname("sset")
-		have_sclr=self.hasportwithname("sclr")
+		#width=self.getprop('lpm_width')
+		#fftype=self.getprop('lpm_fftype','DFF')
+		#avalue=self.getprop('lpm_avalue','1'*width)
+		#pvalue=self.getprop('lpm_pvalue',0)
+		#svalue=self.getprop('lpm_svalue','1'*width)
+		#have_enable=self.hasportwithname("enable")
+		#have_sset=self.hasportwithname("sset")
+		#have_sclr=self.hasportwithname("sclr")
+		#have_aset=self.hasportwithname("aset")
+		#have_aclr=self.hasportwithname("aclr")
+		have_sload=self.hasportwithname("sload")
+		have_aload=self.hasportwithname("aload")
 		have_testenab=self.hasportwithname("testenab")
 		have_testin=self.hasportwithname("testin")
 		have_testout=self.hasportwithname("testout")
-		fftype=self.getprop('lpm_fftype','DFF')
-		pvalue=self.getprop('lpm_pvalue',0)
-		assert not (have_testenab or have_testin or have_testout), "Test port not yet implemented"
-		assert fftype=='DFF', "only D flip-flop is implemented yet"
-		self.content.extend(self.device.createFlipFlops("FF",width,fftype,pvalue,have_enable,have_sset,have_sclr,have_testenab,have_testin,have_testout))
+		assert (not (have_aload or have_sload)) or (fftype != 'DFF'), "have aload or sload while fftype is DFF"
+		assert (not (have_testenab or have_testin or have_testout)) or (have_testenab and have_testin and have_testout), "test ports are present, but not all of them"
+		self.content.extend(self.device.createFlipFlops("FF",self))
 		
 		
 	def lpm_add_sub(self):

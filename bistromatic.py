@@ -345,7 +345,13 @@ class IOPin(AbstractObject):
 			o1.disconnectfrom(p1,o2,p2)
 		for (o1,p1,o2,p2) in con:
 			o1.connectto(p1,o2,p2)
-		#print dis,self.connections
+		#print "eliminating",self
+		#print "disconnected:",dis
+		#print "connected:",con
+		#print "remaining connections: %s"%(self.connections)
+		#print "\n"
+		for (pin1,d1,ob1,opin1) in self.connections:
+			print "\t",ob1.connections
 		return ([],[self])
 	def joined(self,myinput,other,otheroutput):
 		if not self.eliminable:
@@ -670,7 +676,10 @@ class LogicFunction(AbstractObject):
 				otherinputs.remove(i)
 		if otherinput is not None:
 			otherinputs.remove(otherinput)
-		assert set()==set(selfoutputs).intersection(set(otheroutputs)), "output collision between %s(%s) and %s(%s)"%(self,selfoutputs,other,otheroutputs)
+		for v in selfoutputs:
+			if v in otheroutputs:
+				otheroutputs.remove(v)
+		#assert set()==set(selfoutputs).intersection(set(otheroutputs)), "output collision between %s(%s) and %s(%s)"%(self,selfoutputs,other,otheroutputs)
 		if myoutput is not None:
 			selfoutputs.remove(myoutput)
 		result.vars=selfinputs+otherinputs+selfoutputs+otheroutputs

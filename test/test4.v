@@ -2,8 +2,8 @@
 // 
 //-----------------------------------------------------
 module test1 (
- input  D,
  input clock,
+ input  D,
  output  Q 
 ); // End of port list
 //-------------Input ports Data Type-------------------
@@ -16,7 +16,7 @@ reg Q ;
 //------------Code Starts Here-------------------------
 always @ (posedge clock)
 begin
-	Q = ^ D;
+	Q = ~ D;
 end
 
 endmodule // End of Module counter

@@ -1,9 +1,9 @@
 //-----------------------------------------------------
 // 
 //-----------------------------------------------------
-module test (
+module test1 (
+ input clock,
  input  D,
- input  F,
  output  Q 
 ); // End of port list
 //-------------Input ports Data Type-------------------
@@ -11,16 +11,25 @@ module test (
 wire D;
 //-------------Output Ports Data Type------------------
 // Output port can be a storage element (reg) or a wire
-wire Q ;
+reg Q ;
 
 //------------Code Starts Here-------------------------
-assign	Q = (~ D) | F;
+always @ (posedge clock)
+begin
+	Q = ~ D;
+end
 
 endmodule // End of Module counter
 
 module device( inout [28:0] P);
 
-test U_test(
+test1 U_test(
 	P[1], P[2], P[3]
 );
+
+test1 U_test2(
+	P[1], P[4], P[5]
+);
 endmodule
+
+

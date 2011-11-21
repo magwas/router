@@ -13,7 +13,7 @@ wire D;
 wire Q ;
 
 //------------Code Starts Here-------------------------
-assign	Q = ^ D;
+assign	Q = ~ D;
 
 endmodule // End of Module counter
 

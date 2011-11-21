@@ -17,7 +17,7 @@ wire D;
 wire Q ;
 
 //------------Code Starts Here-------------------------
-assign	Q = (^ D) | F | G | H | I;
+assign	Q = (~ D) | F | G | H | I;
 
 endmodule // End of Module counter
 

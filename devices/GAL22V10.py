@@ -2,7 +2,7 @@
 	cells and optimisations specific to 22V10 GAL
 """
 
-from bistromatic import IOPin, LogicFunction, AbstractObject
+from bistromatic import IOPin, LogicFunction, AbstractObject, INPUT
 
 dRows= {
 	23: range(44/44+1,396/44+1),
@@ -18,17 +18,41 @@ dRows= {
 }
 
 oeRows={
-	23: [44/44],
-	22: [440/44],
-	21: [924/44],
-	20: [1496/44],
-	19: [2156/44],
-	18: [2904/44],
-	17: [3652/44],
-	16: [4312/44],
-	15: [4884/44],
-	14: [5368/44],
+	23: 44/44,
+	22: 440/44,
+	21: 924/44,
+	20: 1496/44,
+	19: 2156/44,
+	18: 2904/44,
+	17: 3652/44,
+	16: 4312/44,
+	15: 4884/44,
+	14: 5368/44,
 	}
+
+olmcconf={
+	'23s0': 5808,
+	'23s1': 5809,
+	'22s0': 5810,
+	'22s1': 5811,
+	'21s0': 5812,
+	'21s1': 5813,
+	'20s0': 5814,
+	'20s1': 5815,
+	'19s0': 5816,
+	'19s1': 5817,
+	'18s0': 5818,
+	'18s1': 5819,
+	'17s0': 5820,
+	'17s1': 5821,
+	'16s0': 5822,
+	'16s1': 5823,
+	'15s0': 5824,
+	'15s1': 5825,
+	'14s0': 5826,
+	'14s1': 5827,
+}
+emptyrow="0"*44
 
 class Technology:
 	"""
@@ -47,64 +71,137 @@ class Technology:
 		self.IOPin=IOPin
 		self.partname="GAL22V10"
 		self.OLMCs={}
+		self.OLMCnum=0
+		self.matrix={}
 		self.dRows=dRows
 		self.oeRows=oeRows
+		self.olmcconf=olmcconf
+		# OLMC's common inputs are handled here
+		self.AR=IOPin(INPUT,name="_AR",eliminable=False)
+		self.SP=IOPin(INPUT,name="_SP",eliminable=False)
+		self.content=[self.AR,self.SP]
+		self.clocks=[]
 
-	def createFlipFlops(self,name,width,fftype,pvalue,have_enable,have_sset,have_sclr,have_testenab,have_testin,have_testout):
+	def enumobjs(self):
+		"""
+			Enumerate device-wide objects, which take part in minimization step
+		"""
+		return self.content
+	def createFlipFlops(self,name,ffcell):
 		"""
 		creates an array of flip-flops
+		it would be possible to support a much wider subset of LPM, but as AR and SP
+		are both device-wide terms, it does not worth the effort.
 		"""
+		width=ffcell.getprop('lpm_width')
+		assert 'DFF' == ffcell.getprop('lpm_fftype','DFF'), "OLMC can do only D flip-flop yet"
+		assert not ffcell.getprop('lpm_avalue',False), "LPM_AVALUE is not supported by device"
+		assert not ffcell.getprop('lpm_pvalue',False), "LPM_PVALUE is not supported by device"
+		assert not ffcell.getprop('lpm_svalue',False), "LPM_SVALUE is not supported by device"
+		assert not ffcell.hasportwithname("enable"), "enable input is not supported by device"
+		assert not ffcell.hasportwithname("sset"), "Sset port is not supported by the device"
+		assert not ffcell.hasportwithname("sclr"), "Sclr port is not supported by the device"
+		assert not ffcell.hasportwithname("aset"), "Aset port is not supported by the device"
+		assert not ffcell.hasportwithname("aclr"), "Aclr port is not supported by the device"
+		assert not ffcell.hasportwithname("sload"), "Sload port is not supported by the device"
+		assert not ffcell.hasportwithname("aload"), "Aload port is not supported by the device"
+		assert not ffcell.hasportwithname("testenab"), "test ports are not supported by the device"
 		content=[]
-                for bit in range(width):
-                        RD={"D":"data%u"%bit, "Q":"q%u"%bit}
-                        #c=OLMC(renamedict=RD,initial=int((pvalue&(2 ** bit))>0),name="flipflop%u"%bit)
-                        c=OLMC("%s%u"%(name,bit),self,haveflipflop=True)
+		for bit in range(width):
+			RD={"D":"data%u"%bit, "Q":"q%u"%bit,  }
+			#["D","OE","CLK","AR","SP","PIN","Q"]
+			#c=OLMC(renamedict=RD,initial=int((pvalue&(2 ** bit))>0),name="flipflop%u"%bit)
+			c=OLMC("%s%u"%(name,bit),self,haveflipflop=True)
 			for (orig,newname) in RD.items():
 				c.renamevar(orig,newname)
-			
-                        content.append(c)
-		print "FIXME: this is buggy!"
+			content.append(c)
+		clk=ClockPin(self)
+		content.append(clk)
 		print content
-		return content
-                funcs=[]
-                andtable=[ "000", "010", "100", "111"]
-                onetable=[ "00", "11"]
-                if have_enable:
-                        clk=self.LogicFunction(andtable,["enable","clock","inclock"],2)
-                else:
-                        clk=self.LogicFunction(onetable,["clock","inclock"],2)
-
-                if have_sset:
-                        f=self.LogicFunction(andtable,["sset","inclock","aset"],2)
-                        clk=clk.mold(f)
-                if have_sclr:
-                        f=self.LogicFunction(andtable,["sclr","inclock","aclr"],2)
-                        clk=clk.mold(f)
-                #print clk
-                clk.name="clk"
-                content.append(clk)
 		return(content)
 
+	def doDesign(self,libcell):
+		"""
+			The internal representation is built, and contained in libcell.
+			No optimization is done yet.
+		"""
+		print libcell
+		self.design=libcell
+
+	def place(self,demszky):
+		"""
+			This is the placing.
+			We check the pins, and eliminate clock pins with checkPins
+			Then connect and configure OLMCs to ports.
+			Then calculate fuses in the matrix.
+		"""
+		print demszky
+		self.checkPins()
+		#print self.olmcconf
+		for pinno in range(14,24):
+			pname="port%d"%pinno
+			pin=self.design.ports[pname]
+			print pin,pin.connections
+			if not pin.connections:
+				self.matrix[self.oeRows[pinno]]=emptyrow
+				#print self.olmcconf["%ds0"%pinno]
+				self.matrix[self.olmcconf["%ds0"%pinno]]='0'
+				self.matrix[self.olmcconf["%ds1"%pinno]]='0'
+				for row in self.dRows[pinno]:
+					self.matrix[row]=emptyrow
+				continue
+			#we have connections
+			for (pin,d,ob,opin) in pin.connections:
+				print (pin,d,ob,opin)
+		print self.matrix
+			
+				
 	def checkPins(self):
 		"""
 			Checks whether pins are okay.
+			Also checks for clocks, and eliminates clock pins
 		"""
-		portlist=self.ports.keys()
+		ports=self.design.ports
+		portlist=ports.keys()
 		for i in range(24):
-			pname="PORT%d"%i
+			pname="port%d"%i
 			if i == 12:
-				assert not ((pname in portlist) and (self.ports[pname].connections)), "illegal pin connected: %s"%pname
+				assert not ((pname in portlist) and (ports[pname].connections)), "illegal pin connected: %s"%pname
 			assert pname in portlist, "port %s is missing"%pname
 			portlist.remove(pname)
 		for pname in portlist:
-			assert not (self.ports[pname].connections), "illegal pin connected: %s"%pname
+			assert not (ports[pname].connections), "illegal pin connected: %s"%pname
+		
+		if self.OLMCnum != 0:
+			clkport=ports['port1']
+			for clock in self.clocks:
+				disc=[]
+				print clock,clock.connections
+				for (pin,d,ob,opin) in clock.connections:
+					assert ob == clkport, "Clock port must be PORT1"
+					disc.append((ob,opin,clock,pin))
+				for (ob,opin,clock,pin) in disc:
+					ob.disconnectfrom(opin,clock,pin)
+				self.design.content.remove(clock)
+			
 	def registerOlmc(self,pinno,olmc):
 		if pinno < 14:
 			raise "Illegal pin"
 		if self.OLMCs.has_key(pinno):
 			raise "multiple OLMCs in one slot"
 		self.OLMCs[pinno]=olmc
-
+class ClockPin(IOPin):
+	"""
+		in copy time we register ourselves in device clocks
+	"""
+	def __init__(self,device):
+		IOPin.__init__(self,INPUT,name="clock",eliminable=False)
+		self.device=device
+	def copy(self,name=""):
+		res=IOPin.copy(self)
+		self.device.clocks.append(res)
+		return res
+		
 class OLMC(AbstractObject):
 	"""
 		An OLMC
@@ -114,20 +211,24 @@ class OLMC(AbstractObject):
 		it have an enable input: if it is false, then the pin is input pin
 		functions:
 		 D:	flip-flop input
-		 PIN:	pin tristate
 		 OE:	output enable input
+		 PIN:	pin tristate
 		 Q:     flip-flop output
-                 /Q:	flip-flop output inverted
+                device-wide ports (CLK, AR, SP) are handled by the device code
 	"""
-	def __init__(self,name, device, haveflipflop=None,inverted=None,input=None):
+	def __init__(self,name, device, haveflipflop=None,inverted=None,input=None,have_enable=False,have_sset=False,have_sclr=False,have_testenab=False,have_testin=False,have_testout=False):
 		"""
 			haveflipflop: (0: no, 1: yes, None: undecided)
 			inverted: (0: no, 1: yes, None: undecided)
 			input: (0: no, 1: yes, None: undecided)
 		"""
+		self.have_enable=have_enable
+		self.have_sset=have_sset
+		self.have_sclr=have_sclr
 		vars=["D","OE","PIN","Q"]
 		AbstractObject.__init__(self,vars,ilen=3,iolen=1,objtype="OLMC",name=name)
 		self.device=device
+		self.device.OLMCnum += 1
 		self.name=name
 		self.haveflipflop=haveflipflop
 		self.inverted=inverted

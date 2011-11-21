@@ -15,7 +15,7 @@ class DemszkysMom:
 	def optimize(self):
 		optimized=True
 		while optimized:
-			print "optimizing step",self
+			#print "optimizing step",self
 			optimized=False
 			for i in range(len(self.objlist)):
 				lf=self.objlist[i]
@@ -24,7 +24,7 @@ class DemszkysMom:
 					continue
 				for (pin,d,oob,opin) in lf.connections:
 					time=clock()
-					print "joining",lf,pin,oob,opin,d
+					#print "joining",lf,pin,oob,opin,d
 					if d == OUTPUT:
 						r=lf.join(pin,oob,opin)
 					else:
@@ -54,8 +54,13 @@ class DemszkysMom:
 		for i in self.objlist:
 			if i is None:
 				continue
-			str+="%s: %s\n"%(i.name,i._print())
+			str+="%s: %s\n\n"%(i.name,i._print())
 		return str
+	def place(self):
+		"""
+			We have been trough minimization, now try to place our objects
+		"""
+		self.device.place(self)
 
 class Demszky(DemszkysMom):
 	"""
@@ -72,22 +77,27 @@ class Demszky(DemszkysMom):
 		devfile="devices/%s.py"%devicename
 		m=open(devfile)
 		module=imp.load_module(devicename,m,devfile,('.py','r',imp.PY_SOURCE))
-		device=module.Technology()
+		self.device=module.Technology()
 
 		f=open(file)
 		lisp=f.read()
 		f.close()
-		self.edif=Edif(device,lisp)
-		self.objlist=self.edif.libs['design']['device'].enumobjs()
+		self.edif=Edif(self.device,lisp)
+		self.objlist=self.edif.libs['design']['device'].enumobjs()+self.device.enumobjs()
 
 if __name__ == "__main__":
+	from time import clock
 	(myself,devname,file)=sys.argv
 
 	d=Demszky(devname,file)
 	print "*********Begin**********"
 	print d
 	print "*********Optimizing**********"
+	t=clock()
 	d.optimize()
+	print clock()-t,"secs elapsed"
 	print "*********Result**********"
 	print d
+	print "*********Checks**********"
+	d.place()
 

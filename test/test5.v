@@ -1,9 +1,8 @@
 //-----------------------------------------------------
 // 
 //-----------------------------------------------------
-module test (
+module test1 (
  input  D,
- input  F,
  output  Q 
 ); // End of port list
 //-------------Input ports Data Type-------------------
@@ -13,14 +12,16 @@ wire D;
 // Output port can be a storage element (reg) or a wire
 wire Q ;
 
+wire b ;
 //------------Code Starts Here-------------------------
-assign	Q = (~ D) | F;
+assign b =  ^ D;
+assign	Q =  ^ b;
 
 endmodule // End of Module counter
 
 module device( inout [28:0] P);
 
-test U_test(
-	P[1], P[2], P[3]
+test1 U_test(
+	P[1], P[2]
 );
 endmodule

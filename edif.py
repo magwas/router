@@ -109,6 +109,8 @@ class Cell:
 			#print " ob=",ob,ob.connections
 			#print "nob=",nob,nob.connections
 			for (pin,d,ob2,pin2) in ob.connections:
+				if not (ob2 in self.content):
+					continue
 				i2=self.content.index(ob2)
 				nob2=n.content[i2]
 				nob.connections.add((prefix+':'+pin,d,nob2,prefix+':'+pin2))
@@ -187,14 +189,22 @@ class EdifCell(Cell):
 		"""
 		#print "inverted pins:",self.invertpins
 		for pname in self.invertpins:
+			print "doing inversion for", pname
 			p=self.ports[pname]
+			print p.connections
 			for (pin,d,ob,opin) in p.connections:
+				print ob,opin
+				inv=self.device.LogicFunction(matrix=["10","01"],vars=[pname+"_inv_input",pname+"_inv_output"],ilen=1,name=pname+"_inv")
+				self.content.append(inv)
+				print inv
 				if d==OUTPUT:
-					inv=self.device.LogicFunction(["10","01"],[p+"_inv_input",p+"_inv_output"],name=p+"_inv")
-					self.content.append(inv)
 					p.disconnectfrom(pin,ob,opin)
-					p.connectto(pin,inv,p+"_inv_input")
-					inv.connectto(p+"_inv_output",ob,opin)
+					p.connectto(pin,inv,pname+"_inv_input")
+					inv.connectto(pname+"_inv_output",ob,opin)
+				else:
+					ob.disconnectfrom(opin,p,pin)
+					ob.connectto(opin,inv,pname+"_inv_input")
+					inv.connectto(pname+"_inv_output",p,pin)
 				
 	def parsecell(self,construct):
 		"""
@@ -234,6 +244,10 @@ class EdifCell(Cell):
 				plist.append(self.instances[devname].ports[portname])
 			else:
 				plist.append(self.ports[portname])
+		print "net %s: %s"%(name,plist)
+		if len(plist) == 1:
+			print "dropping nowhere net %s: %s"%(name,plist)
+			return
 		for p1 in plist:
 			for p2 in plist:
 				 p1.connectto(p1.vars[0],p2,p2.vars[0])
@@ -306,6 +320,24 @@ class Edif:
 				lib={}
 				self.parselib(lib,construct)
 				self.libs[construct[1]]=lib
+			elif (construct[0]=="design"):
+				assert (construct[2][0] == 'cellref') and ( construct[2][2][0] == 'libraryref'), "cannot parse design"
+				devname=construct[2][1]
+				libname=construct[2][2][1]
+				assert libname in self.libs, "Cannot find design %s in libs (%s)"%(libname,self.libs.keys())
+				self.device.doDesign(self.libs[libname][devname])
+			elif (construct[0]=="edifversion"):
+				if construct[1] != '2':
+					raise NotImplementedError, "EDIF version other than 2: %s"%(construct)
+			elif (construct[0]=="ediflevel"):
+				if construct[1] != '0':
+					raise NotImplementedError, "EDIF level other than 0: %s"%(construct)
+			elif (construct[0]=="keywordmap"):
+				pass
+			elif (construct[0]=="status"):
+				pass
+			else:
+				raise NotImplementedError, construct[0]
 	def __str__(self):
 		s=""
 		for v in self.libs.values():
@@ -329,8 +361,7 @@ class Edif:
 			elif cell[0] == "technology":
 				pass
 			else:
-				print cell
-				raise "unparsed"
+				raise NotImplementedError, cell[0]
 	
 
 
